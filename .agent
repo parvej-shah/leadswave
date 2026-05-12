@@ -1,0 +1,559 @@
+# leadgen.agent
+# AI Agent Engineering Rules — LeadGen Autopilot
+# This file is the law. Every agent, node, and tool must follow these rules.
+# No exceptions without a written reason in a comment.
+
+# ============================================================
+# SECTION 1: CORE PHILOSOPHY
+# ============================================================
+
+[philosophy]
+
+# The agent is a tool, not a brain.
+# It executes well-defined steps reliably.
+# It does NOT make open-ended decisions without constraints.
+
+# Complexity is the enemy.
+# Every abstraction must justify its existence.
+# If you can do it in a plain function, do not make it an agent node.
+
+# State is the source of truth.
+# The lead state machine is sacred.
+# Every action must begin by reading state and end by writing state.
+
+# Failure is expected. Recovery is mandatory.
+# Every node that touches an external API must handle failure gracefully.
+# Partial progress must be saveable. Never lose work silently.
+
+# Agents notify, humans decide on ambiguous cases.
+# The agent handles the obvious. It escalates the unclear.
+# Auto-send only what you are 100% confident about.
+
+
+# ============================================================
+# SECTION 2: LANGGRAPH CONSTRAINTS
+# ============================================================
+
+[langgraph]
+
+# --- Graph Design ---
+
+# Each graph owns exactly ONE domain.
+# scout_graph   → finding and enriching leads only
+# outreach_graph → sending emails and scheduling follow-ups only
+# inbox_graph   → classifying replies and taking action only
+# Never mix concerns across graphs.
+
+# Each graph must have:
+# - A clearly typed State interface
+# - A defined entry node
+# - A defined terminal node or END
+# - All conditional edges documented with comments
+
+# State must be flat.
+# No nested objects more than 2 levels deep in graph state.
+# Complex data lives in the DB, not in graph state.
+# State carries IDs and small payloads — not full records.
+
+# CORRECT:
+# state = { leadId: string, classification: string, sent: boolean }
+
+# WRONG:
+# state = { lead: { company: { contacts: [...], campaigns: [...] } } }
+
+# --- Node Design ---
+
+# One node = one responsibility.
+# A node does exactly one thing.
+# If you find yourself writing "and" in a node's description, split it.
+
+# CORRECT: load_context_node, classify_node, send_node (3 nodes)
+# WRONG:   load_and_classify_and_send_node (1 god node)
+
+# Every node must follow this signature:
+# async function node_name(state: GraphState): Promise<Partial<GraphState>>
+# It receives state, returns only the fields it changed.
+# It never mutates state directly.
+
+# Every node must handle its own errors.
+# Throw only for unrecoverable failures (missing API key, DB down).
+# For recoverable failures (rate limit, scrape timeout), retry in-node.
+
+# Max 3 retries per external call inside a node.
+# Use exponential backoff: 1s, 2s, 4s.
+# After 3 failures, return { error: "reason", skip: true } in state.
+
+# --- Conditional Edges ---
+
+# All routing logic lives in dedicated router functions.
+# Never put if/else routing logic inside a node.
+
+# CORRECT:
+# function routeByClassification(state) {
+#   if (state.classification === "hot") return "hot_node"
+#   if (state.classification === "warm") return "warm_node"
+#   return "cold_node"
+# }
+# graph.addConditionalEdges("classify_node", routeByClassification)
+
+# WRONG:
+# Inside classify_node: if hot → call hotNode() directly
+
+# --- Parallel Execution ---
+
+# Use parallel nodes (fan-out) only when:
+# 1. Tasks are truly independent
+# 2. You have more than 3 items to process
+# 3. Each task can fail independently without breaking others
+
+# Max parallelism = 5 concurrent operations.
+# Never fan-out more than 5 at once (API rate limits, DB connections).
+
+# --- Graph Invocation ---
+
+# Never invoke a graph inside another graph's node.
+# Graphs are triggered from API routes or BullMQ workers only.
+# This prevents infinite loops and makes tracing possible.
+
+
+# ============================================================
+# SECTION 3: LEAD STATE MACHINE RULES
+# ============================================================
+
+[state_machine]
+
+# The state machine is the single source of truth for every lead.
+# No code may act on a lead without first reading its current state.
+# No code may skip a state transition.
+
+# Valid states (in order):
+# discovered → enriching → ready → contacted_1 → contacted_2
+# → contacted_3 → contacted_4 → replied_hot → replied_warm
+# → replied_cold → snoozed → meeting_booked → suppressed → bounced
+
+# Transition rules:
+# - Forward transitions only (except: any state → suppressed/bounced)
+# - A lead in "suppressed" or "bounced" can NEVER be transitioned out
+# - A lead in "meeting_booked" can NEVER be re-entered into a sequence
+# - A lead in "replied_cold" can NEVER receive another email
+
+# Before every send operation, check:
+# 1. lead.state is "ready" or "contacted_X" (correct sequence step)
+# 2. lead.email is not on suppression list
+# 3. No pending send job already exists for this lead
+# If any check fails → skip with logged reason, never throw.
+
+# State transitions must be atomic.
+# Update state + log the transition in one DB transaction.
+# Never update state without logging why.
+
+# Transition log format (messages table direction = "system"):
+# "State changed: contacted_1 → contacted_2 | reason: scheduled followup"
+# "State changed: contacted_2 → replied_hot | reason: inbound reply classified hot"
+
+
+# ============================================================
+# SECTION 4: AI / LLM USAGE RULES
+# ============================================================
+
+[llm]
+
+# --- Model Selection ---
+# Use Claude (claude-sonnet-4-20250514) as default.
+# Never use a model that is not explicitly configured in settings.
+# Never hardcode model names outside of lib/ai/client.ts.
+
+# --- Prompt Design ---
+
+# Every prompt must be in its own file.
+# Location: agents/{graph_name}/prompts/{node_name}.prompt.ts
+# Export as a function that takes context and returns a string.
+# Never inline long prompts inside node logic.
+
+# CORRECT:
+# import { buildClassifyPrompt } from "./prompts/classify.prompt"
+# const prompt = buildClassifyPrompt({ thread, offer })
+
+# WRONG:
+# const prompt = `You are an AI that classifies emails...
+#   Here is the thread: ${thread}... [50 lines inline]`
+
+# Every prompt must include:
+# 1. Role definition (1 sentence, specific)
+# 2. Task definition (what to do, what NOT to do)
+# 3. Output format (exact JSON schema or plain text spec)
+# 4. Example (at least one input/output pair)
+# Prompts without examples produce inconsistent output. No exceptions.
+
+# --- Output Parsing ---
+
+# Every LLM call that expects structured output must:
+# 1. Request JSON explicitly in the prompt
+# 2. Wrap JSON.parse in try/catch
+# 3. Validate with Zod schema before using the result
+# 4. Have a defined fallback if parsing fails
+
+# CORRECT:
+# const raw = await llm.invoke(prompt)
+# const parsed = safeParseJSON(raw.content) // try/catch inside
+# const validated = ClassifySchema.safeParse(parsed)
+# if (!validated.success) return { classification: "warm" } // safe fallback
+
+# WRONG:
+# const result = JSON.parse(raw.content) // will crash on bad output
+
+# --- Cost Control ---
+
+# Max tokens per call:
+# - Personalization (email writing): 300 output tokens
+# - Classification: 150 output tokens
+# - Reply drafting: 400 output tokens
+# - Enrichment/scoring: 200 output tokens
+# Never set max_tokens above 500 in any single agent call.
+
+# Never pass full HTML to the LLM.
+# Always extract and trim text before passing to prompt.
+# Max context per call: 2000 tokens of lead/company data.
+# Summarize or truncate anything longer before the LLM call.
+
+# --- Temperature ---
+# Classification tasks: temperature 0 (deterministic)
+# Email writing tasks: temperature 0.7 (natural variation)
+# Reply drafting: temperature 0.4 (controlled but not robotic)
+
+
+# ============================================================
+# SECTION 5: TOOL / EXTERNAL API RULES
+# ============================================================
+
+[tools]
+
+# Every external service has exactly one client file.
+# lib/email/client.ts     → Resend
+# lib/scraper/client.ts   → Firecrawl
+# lib/telegram/client.ts  → Telegram Bot
+# lib/calendar/client.ts  → Google Calendar
+# lib/queue/client.ts     → BullMQ
+# Never instantiate SDK clients outside these files.
+
+# Every client file must:
+# 1. Read API keys from environment variables only
+# 2. Throw a clear error if the key is missing at startup
+# 3. Export typed wrapper functions (never export the raw SDK client)
+# 4. Handle rate limiting internally (429 → wait and retry)
+
+# --- Firecrawl (scraper) ---
+# Max 5 concurrent scrape requests at any time.
+# Max 1 scrape per domain per 24 hours (store last_scraped_at on company).
+# If scrape fails after 3 retries → store null, continue pipeline.
+# Never block the pipeline on a failed scrape.
+
+# --- Resend (email) ---
+# Always check suppression list before calling Resend.
+# Always save outbound email to messages table BEFORE calling Resend.
+# If Resend fails → mark job as failed, do NOT retry immediately.
+# Retry failed sends via BullMQ with 1 hour delay, max 2 retries.
+# Never send more than 100 emails per day across all campaigns.
+
+# --- Telegram ---
+# Telegram notifications are fire-and-forget.
+# A failed Telegram notification NEVER blocks the agent pipeline.
+# Log the failure, continue execution.
+# Keep messages under 200 characters. Use links for details.
+
+# --- Google Calendar ---
+# Always check free/busy before proposing slots.
+# Never create an event without confirmation from the lead.
+# Store Google refresh token encrypted in settings table.
+# If Calendar API fails → notify via Telegram, do NOT crash.
+
+# --- BullMQ ---
+# Every job must have a unique jobId = `{type}:{leadId}:{step}`
+# This prevents duplicate jobs if the scheduler runs twice.
+# Every job must have a removeOnComplete: true option.
+# Every job must have a removeOnFail: false (keep for debugging).
+# Never create a job inside a transaction (create after commit).
+
+
+# ============================================================
+# SECTION 6: DATABASE RULES
+# ============================================================
+
+[database]
+
+# All DB access goes through Prisma only.
+# No raw SQL except for reporting/analytics queries.
+# No Supabase client (JS SDK) for data operations — Prisma only.
+# Supabase client is used for Auth only.
+
+# Every query that writes must be wrapped in a transaction
+# if it touches more than one table.
+
+# Never select * in production queries.
+# Always specify exactly which fields you need.
+
+# CORRECT:
+# prisma.lead.findMany({ where: {...}, select: { id, email, state } })
+
+# WRONG:
+# prisma.lead.findMany({ where: {...} })
+
+# Index rules — these indexes must exist:
+# leads.campaignId (foreign key)
+# leads.state (heavily filtered)
+# leads.email (uniqueness checks)
+# messages.leadId (foreign key)
+# jobs.leadId + jobs.status (queue checks)
+
+# Soft deletes only. Never hard delete leads or messages.
+# Add deletedAt: DateTime? to all tables.
+# All queries must include where: { deletedAt: null }.
+
+
+# ============================================================
+# SECTION 7: API ROUTE RULES
+# ============================================================
+
+[api_routes]
+
+# Every API route must:
+# 1. Authenticate the request first (check Supabase session)
+# 2. Validate input with Zod before touching DB or agents
+# 3. Return consistent response shape:
+#    { success: true, data: {} } or { success: false, error: "message" }
+# 4. Never return raw Prisma errors to the client
+# 5. Log errors server-side with context
+
+# Webhook routes (/api/webhooks/*) are exempt from auth check
+# but must verify the webhook signature (Resend signature header).
+
+# Agent trigger routes (/api/agents/*) must:
+# 1. Be authenticated
+# 2. Add the job to BullMQ (async) — never run agents synchronously
+# 3. Return immediately with { success: true, jobId }
+# 4. Never await the full agent execution in the request handler
+
+# Route file structure:
+# Every route.ts exports only: GET, POST, PUT, DELETE
+# Business logic lives in lib/ or agents/ — never in route.ts
+# Route files should be under 50 lines.
+
+
+# ============================================================
+# SECTION 8: BULLMQ / QUEUE RULES
+# ============================================================
+
+[queue]
+
+# Queue names:
+# "outreach"  → sending emails + scheduling follow-ups
+# "followup"  → scheduled follow-up steps
+# "scout"     → lead discovery jobs (lower priority)
+
+# Every worker must:
+# 1. Load fresh data from DB at job start (never trust job payload for state)
+# 2. Check lead state is valid before processing
+# 3. Update lead state on completion
+# 4. Send Telegram notification on meaningful events
+
+# Job payload must be minimal:
+# { leadId: string, step: number, campaignId: string }
+# That's it. Load everything else from DB inside the worker.
+
+# Never put email content or scraped data in job payloads.
+# Payloads are stored in Redis — keep them under 1KB.
+
+# Workers run as a separate process (workers/index.ts).
+# Never import worker files into Next.js app code.
+# Workers must handle SIGTERM gracefully (finish current job, exit).
+
+# Concurrency settings:
+# outreach worker: concurrency 2 (Resend rate limits)
+# followup worker: concurrency 5
+# scout worker: concurrency 1 (Firecrawl rate limits)
+
+
+# ============================================================
+# SECTION 9: ANTI-PATTERNS — NEVER DO THESE
+# ============================================================
+
+[forbidden]
+
+# NEVER use setTimeout for scheduling.
+# Use BullMQ delay instead.
+# setTimeout does not survive server restarts.
+
+# NEVER store API keys in code or git.
+# All secrets in .env.local only.
+# .env.local is in .gitignore. Verify before first commit.
+
+# NEVER call one graph from inside another graph's node.
+# Trigger graphs from workers or API routes only.
+
+# NEVER send an email without checking suppression list first.
+# This is a legal requirement (CAN-SPAM / GDPR), not just best practice.
+
+# NEVER swallow errors silently.
+# Every catch block must either:
+# a) Log the error with context and continue
+# b) Log the error and throw (if unrecoverable)
+# Empty catch blocks are forbidden.
+
+# NEVER let the LLM decide whether to send an email.
+# The LLM writes content. The system decides whether to send.
+# Sending logic is deterministic code, not AI output.
+
+# NEVER pass user-supplied text directly into a prompt without sanitization.
+# Strip HTML, limit length, escape special characters first.
+
+# NEVER run DB migrations in production without a backup.
+# Run prisma migrate deploy, never prisma migrate dev in prod.
+
+# NEVER expose the full lead dataset to the LLM context.
+# Pass only what's needed for the specific task.
+# Max 5 leads at a time in any batch LLM call.
+
+# NEVER block the Next.js request thread with agent execution.
+# Agents run in workers. API routes just enqueue jobs.
+
+
+# ============================================================
+# SECTION 10: PERFORMANCE CONSTRAINTS
+# ============================================================
+
+[performance]
+
+# Daily send limit: 100 emails/day hard cap.
+# Enforced in outreach worker before every send.
+# Count is reset at midnight UTC.
+
+# Scout batch size: 50 leads per campaign run.
+# Do not attempt to scrape 500 sites in one job.
+# Run in batches, pause 2s between batches.
+
+# LLM calls per lead:
+# - Enrichment/scoring: 1 call
+# - Email personalization: 1 call
+# - Reply classification: 1 call
+# - Reply drafting: 1 call
+# Max 4 LLM calls per lead lifetime. Any more needs justification.
+
+# DB connection pool: max 10 connections (Supabase free tier limit).
+# Prisma datasource must set connection_limit=10.
+
+# Redis memory: keep jobs lightweight.
+# Completed jobs auto-removed (removeOnComplete: true).
+# Failed jobs kept max 72 hours then auto-purged.
+
+
+# ============================================================
+# SECTION 11: OBSERVABILITY
+# ============================================================
+
+[observability]
+
+# Every meaningful event must be logged with this structure:
+# console.log(JSON.stringify({
+#   event: "lead.state.changed",
+#   leadId: "xxx",
+#   from: "contacted_1",
+#   to: "replied_hot",
+#   timestamp: new Date().toISOString()
+# }))
+
+# Required log events:
+# - lead.discovered
+# - lead.enriched
+# - lead.state.changed (every transition)
+# - email.sent
+# - email.bounced
+# - reply.received
+# - reply.classified
+# - meeting.booked
+# - job.queued
+# - job.completed
+# - job.failed
+# - llm.called (with node name and token count)
+# - error.* (any caught error)
+
+# Never log:
+# - Email body content (privacy)
+# - Full scraped HTML
+# - API keys or tokens (even partial)
+# - Personal contact data beyond leadId
+
+# Telegram notification triggers (push to your phone):
+# ✅ Hot lead detected
+# ✅ Meeting booked
+# ✅ Campaign completed (all leads processed)
+# ✅ Daily summary (sent at 18:00 local time)
+# ❌ Every email sent (too noisy)
+# ❌ Cold replies (you don't need to know)
+# ❌ Follow-up steps (background noise)
+
+
+# ============================================================
+# SECTION 12: FILE & FOLDER CONSTRAINTS
+# ============================================================
+
+[structure]
+
+# Folder ownership rules:
+# agents/        → LangGraph graphs and nodes ONLY
+# lib/           → Stateless utility clients ONLY
+# workers/       → BullMQ worker processes ONLY
+# app/api/       → HTTP route handlers ONLY (thin layer)
+# app/(dashboard)/ → UI components and pages ONLY
+# prisma/        → Schema and migrations ONLY
+
+# No business logic in app/ routes.
+# No DB calls in agents/ nodes (use lib/db helper functions).
+# No LLM calls in lib/ (LLM is agents-only territory).
+# No UI imports in workers/ or agents/.
+
+# File naming:
+# Nodes:    {name}.node.ts
+# Prompts:  {name}.prompt.ts
+# Graphs:   graph.ts (one per folder)
+# Workers:  {name}.worker.ts
+# Clients:  client.ts (one per lib subfolder)
+# Schemas:  {name}.schema.ts (Zod schemas)
+
+# Max file length: 200 lines.
+# If a file exceeds 200 lines, it has more than one responsibility.
+# Split it.
+
+# Max function length: 40 lines.
+# If a function exceeds 40 lines, extract sub-functions.
+
+
+# ============================================================
+# SECTION 13: V1 SCOPE ENFORCEMENT
+# ============================================================
+
+[scope]
+
+# This is v1. The following are explicitly OUT OF SCOPE.
+# Do not build them, do not stub them, do not plan for them.
+# They will distract you and bloat the system.
+
+# OUT OF SCOPE:
+# - LinkedIn / SMS / WhatsApp outreach
+# - Multi-mailbox or multi-domain sending
+# - Team features (multiple users, shared inbox, roles)
+# - CRM sync (HubSpot, Salesforce)
+# - Lead scoring weights UI (use hardcoded defaults)
+# - A/B testing sequences
+# - Analytics beyond basic KPI cards
+# - Mobile app
+# - Webhooks out (only webhooks in)
+# - Multi-language support
+# - White-labeling
+
+# If a feature is not in the 12-step build plan, it does not exist yet.
+# Add a TODO comment maximum. Never start building it during the sprint.
+
+# The definition of done for v1:
+# A lead goes from search query → personalized email →
+# follow-ups → reply classified → Telegram notification →
+# meeting on calendar. That loop works reliably. Ship it.
