@@ -1,0 +1,474 @@
+Two days is tight but doable if we're ruthless about scope. Let me design this as a proper sprint.
+
+---
+
+## Ground rules for 2-day build
+
+```
+✅ Build only what makes the loop work end-to-end
+❌ No perfect UI — functional only
+❌ No edge case handling in v1
+❌ No tests — ship first, test later
+✅ Every step produces something runnable
+✅ Never break what's already working
+```
+
+---
+
+## The critical path — what MUST work by end of day 2
+
+```
+You type a search query
+       ↓
+System finds companies + emails
+       ↓
+Sends personalized email
+       ↓
+Follows up automatically
+       ↓
+Reply comes in → classified
+       ↓
+Hot lead → Telegram ping to you
+       ↓
+Meeting booked → Telegram ping to you
+```
+
+Everything else is nice-to-have.
+
+---
+
+## DAY 1 — The Foundation + Scout + Outreach
+
+### Step 1 — Project Setup (1.5 hours)
+**Goal**: Runnable app with DB connected
+
+```
+1. npx create-next-app@latest --typescript --tailwind --app
+2. Install dependencies:
+   - @langchain/langgraph
+   - @langchain/anthropic
+   - @prisma/client prisma
+   - bullmq
+   - resend
+   - @firecrawl/js
+   - node-telegram-bot-api
+   - shadcn/ui (init)
+   - zod
+
+3. Supabase project → get connection string
+4. Prisma schema (campaigns, leads, messages, jobs)
+5. prisma migrate dev
+6. .env.local with all keys
+```
+
+**Done when**: `npm run dev` works, Prisma Studio shows empty tables.
+
+---
+
+### Step 2 — Telegram Bot (30 min)
+**Goal**: You can receive notifications before anything else is built
+
+```
+1. Create bot via @BotFather → get token
+2. lib/telegram/client.ts → sendMessage(text)
+3. One test API route → /api/test/telegram
+4. Hit it → message appears on your phone
+```
+
+**Why first**: Every subsequent step can notify you when it works. Instant feedback loop.
+
+**Done when**: Your phone receives "System online 🟢"
+
+---
+
+### Step 3 — Auth + Basic Shell (1 hour)
+**Goal**: Protected dashboard you can log into
+
+```
+1. Supabase Auth → email login
+2. middleware.ts → protect /dashboard routes
+3. Basic layout:
+   /dashboard
+   /dashboard/campaigns
+   /dashboard/leads
+   /dashboard/inbox
+   /dashboard/settings
+4. shadcn Sidebar + nav — bare bones, no data yet
+```
+
+**Done when**: You can log in and see an empty dashboard.
+
+---
+
+### Step 4 — Settings Page (45 min)
+**Goal**: Store all API keys and your offer text in DB
+
+```
+Fields:
+- Your offer description (the pitch AI will use)
+- Sending email (from address)
+- Firecrawl API key
+- Anthropic API key
+- Telegram chat ID (auto-detected from bot)
+- Google Calendar (OAuth — defer to day 2 if needed)
+
+Store in: Supabase settings table (one row per user)
+```
+
+**Done when**: You can save settings and read them back.
+
+---
+
+### Step 5 — Scout Agent (2.5 hours)
+**Goal**: Type a query → get a list of companies with emails
+
+This is the first LangGraph graph.
+
+```typescript
+// agents/scout/graph.ts
+
+State: {
+  query: string
+  location: string
+  campaignId: string
+  rawResults: any[]
+  leads: ExtractedLead[]
+  savedCount: number
+}
+
+Nodes:
+1. search_node
+   - Firecrawl search: "{query} {location} email contact"
+   - Also: Google Maps scrape for local businesses
+   - Returns: list of URLs + snippets
+
+2. scrape_node
+   - For each URL: Firecrawl scrape
+   - Extract: company name, email, description
+   - Run in parallel (Promise.all, max 5 at a time)
+
+3. dedupe_node
+   - Check emails against existing leads in DB
+   - Remove duplicates
+
+4. save_node
+   - Bulk insert into leads table
+   - State: "discovered"
+   - Telegram notify: "Found {n} leads for {query}"
+```
+
+**Campaign creation UI**:
+```
+Simple form:
+- Campaign name
+- Search query ("digital marketing agencies")
+- Location ("Dhaka, Bangladesh")
+- Your offer (pre-filled from settings)
+[Launch Campaign] button → triggers scout graph
+```
+
+**Done when**: You create a campaign, scout runs, leads appear in DB.
+
+---
+
+### Step 6 — Leads Table UI (30 min)
+**Goal**: See what the scout found
+
+```
+Simple table columns:
+- Company name
+- Email
+- Website
+- State (badge)
+- Score
+- Actions: [Send Now] [Remove]
+
+Use shadcn Table + Badge
+Fetch from /api/leads?campaignId=xxx
+```
+
+**Done when**: Leads from scout appear in a readable table.
+
+---
+
+### Step 7 — Outreach Agent (2.5 hours)
+**Goal**: Lead gets a personalized email, follow-ups scheduled
+
+This is the second LangGraph graph.
+
+```typescript
+// agents/outreach/graph.ts
+
+State: {
+  leadId: string
+  lead: Lead
+  campaign: Campaign
+  emailDraft: string
+  sent: boolean
+}
+
+Nodes:
+1. load_context_node
+   - Load lead + campaign from DB
+   - Scrape lead's website (Firecrawl, 1 page)
+   - Build context: who they are + your offer
+
+2. personalize_node
+   - LLM call (Claude/GPT-4o)
+   - Prompt: given their site summary + your offer,
+     write a short cold email (3 sentences max)
+   - Subject line + body
+
+3. send_node
+   - Resend API → send email
+   - Save to messages table (direction: outbound)
+   - Update lead state: "contacted_1"
+
+4. schedule_followups_node
+   - BullMQ: add 3 jobs
+     → followup_2: delay 3 days
+     → followup_3: delay 7 days
+     → followup_4: delay 12 days
+   - Save jobs to jobs table
+```
+
+**BullMQ Worker** (workers/outreach.worker.ts):
+```typescript
+// Separate process
+// Processes follow-up jobs when they fire
+// Checks: is lead still in contacted_X state?
+// If yes → send next email
+// If no (replied, suppressed) → skip
+```
+
+**Done when**: Click [Send Now] on a lead → email arrives in inbox → 3 follow-up jobs created in Redis.
+
+---
+
+## DAY 2 — Inbox Agent + Notifications + Booking + Polish
+
+### Step 8 — Resend Inbound Webhook (1 hour)
+**Goal**: Replies to your emails are received by the system
+
+```
+1. Configure Resend inbound:
+   - Set MX records on your sending domain
+   - Webhook URL: /api/webhooks/email/inbound
+
+2. /api/webhooks/email/inbound/route.ts:
+   - Parse Resend payload
+   - Extract: from, subject, body, in-reply-to header
+   - Match to lead via email address
+   - Trigger Inbox Agent with lead context
+
+3. Test with a real reply to yourself
+```
+
+**Done when**: You reply to your own test email → webhook fires → logged in console.
+
+---
+
+### Step 9 — Inbox Agent (2.5 hours)
+**Goal**: Reply classified → you get pinged for hot leads
+
+This is the third and most important LangGraph graph.
+
+```typescript
+// agents/inbox/graph.ts
+
+State: {
+  leadId: string
+  inboundEmail: InboundEmail
+  lead: Lead
+  priorMessages: Message[]
+  classification: "hot" | "warm" | "cold" | "ooo" | "bounce"
+  draftReply: string | null
+  action: string
+}
+
+Nodes:
+1. load_context_node
+   - Load lead + full message history
+   - Load campaign offer text
+
+2. classify_node
+   - LLM call with full thread context
+   - Classify into: hot / warm / cold / ooo / bounce
+   - Return: classification + reasoning
+
+3. route_node (conditional edge)
+   - hot → hot_node
+   - warm → warm_node
+   - cold → cold_node
+   - ooo → snooze_node
+   - bounce → bounce_node
+
+4. hot_node
+   - Update lead state: "replied_hot"
+   - Cancel all pending follow-up jobs (BullMQ)
+   - Telegram notify immediately:
+     "🔥 HOT LEAD: {company}
+      They said: {reply snippet}
+      → Reply now: {link to inbox}"
+
+5. warm_node
+   - Update lead state: "replied_warm"
+   - Cancel follow-ups
+   - LLM: draft a contextual reply
+   - Save draft to DB (not sent yet)
+   - Telegram notify:
+     "💬 {company} has a question
+      Draft ready for approval → {link}"
+
+6. cold_node
+   - Update lead state: "replied_cold"
+   - Cancel follow-ups
+   - Add to suppression
+   - No notification (you don't need to know)
+
+7. snooze_node
+   - Cancel current follow-ups
+   - Schedule re-entry in 60 days
+   - No notification
+
+8. bounce_node
+   - Update lead state: "bounced"
+   - Cancel follow-ups
+   - Flag email as bad
+```
+
+**Done when**: Reply to your test email → Telegram message arrives on your phone within seconds.
+
+---
+
+### Step 10 — Inbox UI (1 hour)
+**Goal**: See and act on warm leads without leaving the app
+
+```
+List view:
+- Hot leads at top (red badge)
+- Warm leads below (yellow badge)
+- Each row: company, snippet, classification, time
+
+Detail view (click a lead):
+- Full thread (like email client)
+- For warm leads: draft reply shown in editable textarea
+- [Send Reply] button → sends via Resend + updates state
+- [Not Interested] → suppresses
+```
+
+**Done when**: You can read a thread and send the AI draft reply from the UI.
+
+---
+
+### Step 11 — Google Calendar + Meeting Booking (1.5 hours)
+**Goal**: Hot lead confirms meeting → it appears on your calendar
+
+```
+1. Google OAuth in settings
+   - Scope: calendar.events + calendar.readonly
+   - Store refresh token in settings table
+
+2. lib/calendar/client.ts:
+   - getAvailableSlots(date_range) → free slots
+   - createEvent(lead, slot) → Google Meet link
+
+3. Add to hot_node in Inbox Agent:
+   - If reply contains meeting intent keywords
+     ("yes", "interested", "call", "when are you free")
+   - Fetch 3 available slots from calendar
+   - Draft reply proposing slots
+
+4. On confirmation reply:
+   - Create calendar event
+   - Send confirmation email with Meet link
+   - Update lead state: "meeting_booked"
+   - Telegram notify:
+     "📅 Meeting booked with {company}
+      {date} at {time}
+      Google Meet: {link}"
+```
+
+**Done when**: A "yes I'm interested" reply → calendar event created → you get notified.
+
+---
+
+### Step 12 — Dashboard (1 hour)
+**Goal**: One screen that tells you what's happening
+
+```
+KPI cards (top row):
+- Total leads found
+- Emails sent
+- Reply rate
+- Hot leads
+- Meetings booked
+
+Today's activity feed:
+- Hot lead from X company 🔥
+- Meeting booked with Y 📅
+- Z leads found from campaign W
+
+Campaign health table:
+- Campaign name | Sent | Replies | Hot | Meetings
+```
+
+**Done when**: Numbers are real, pulled from DB.
+
+---
+
+## Full 2-day timeline
+
+```
+DAY 1
+09:00 – 10:30  Step 1: Project setup + DB schema
+10:30 – 11:00  Step 2: Telegram bot
+11:00 – 12:00  Step 3: Auth + shell
+12:00 – 13:00  Step 4: Settings page
+13:00 – 14:00  LUNCH
+14:00 – 16:30  Step 5: Scout agent
+16:30 – 17:00  Step 6: Leads table UI
+17:00 – 19:30  Step 7: Outreach agent + BullMQ worker
+
+DAY 2
+09:00 – 10:00  Step 8: Resend inbound webhook
+10:00 – 12:30  Step 9: Inbox agent (most complex)
+12:30 – 13:00  LUNCH
+13:00 – 14:00  Step 10: Inbox UI
+14:00 – 15:30  Step 11: Google Calendar + booking
+15:30 – 16:30  Step 12: Dashboard
+16:30 – 17:00  Buffer: fix what broke, end-to-end test
+```
+
+---
+
+## Dependency map — build order is non-negotiable
+
+```
+Step 1 (setup)
+    └── Step 2 (telegram) ← test every step after this
+    └── Step 3 (auth)
+            └── Step 4 (settings)
+                    └── Step 5 (scout) ← needs Firecrawl key
+                            └── Step 6 (leads UI)
+                                    └── Step 7 (outreach) ← needs Resend
+                                            └── Step 8 (webhook)
+                                                    └── Step 9 (inbox agent)
+                                                            └── Step 10 (inbox UI)
+                                                            └── Step 11 (calendar)
+                                                    └── Step 12 (dashboard)
+```
+
+---
+
+## What you'll have at end of day 2
+
+A fully working loop:
+- Search → find companies → send personalized emails
+- Auto follow-up on schedule
+- Replies classified automatically
+- Hot leads ping your Telegram instantly
+- Meetings land on your Google Calendar
+- Dashboard shows everything
+
+**Ready to start with Step 1?** I'll give you the exact code for each step as we go.
