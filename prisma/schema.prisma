@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Campaign {
+  id        String    @id @default(cuid())
+  name      String
+  query     String
+  location  String
+  offerText String
+  status    String    @default("active") // active | paused | completed
+  leads     Lead[]
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+}
+
+model Lead {
+  id            String    @id @default(cuid())
+  campaignId    String
+  companyName   String
+  website       String?
+  email         String?
+  description   String?
+  state         String    @default("discovered")
+  lastTouchedAt DateTime?
+  messages      Message[]
+  jobs          Job[]
+  campaign      Campaign  @relation(fields: [campaignId], references: [id])
+  createdAt     DateTime  @default(now())
+  deletedAt     DateTime?
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  leadId    String
+  direction String   // outbound | inbound | system
+  subject   String?
+  body      String
+  sentAt    DateTime @default(now())
+  lead      Lead     @relation(fields: [leadId], references: [id])
+}
+
+model Job {
+  id          String   @id @default(cuid())
+  leadId      String
+  type        String   // followup_2 | followup_3 | followup_4
+  scheduledAt DateTime
+  status      String   @default("pending") // pending | done | cancelled | failed
+  bullmqId    String?
+  lead        Lead     @relation(fields: [leadId], references: [id])
+}
+
+model Settings {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  offerText          String?
+  fromEmail          String?
+  fromName           String?
+  telegramChatId     String?
+  googleRefreshToken String?
+  dailySendLimit     Int      @default(100)
+  autoSendReplies    Boolean  @default(false)
+}
+
+model Suppression {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  reason    String   // bounced | unsubscribed | manual | complained
+  createdAt DateTime @default(now())
+}
