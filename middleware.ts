@@ -1,4 +1,31 @@
-export { auth as middleware } from "@/lib/auth";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+function hasSessionCookie(req: NextRequest): boolean {
+  // Auth.js v5 cookie names (with and without secure prefix), plus legacy next-auth names.
+  return [
+    "__Secure-authjs.session-token",
+    "authjs.session-token",
+    "__Secure-next-auth.session-token",
+    "next-auth.session-token",
+  ].some((name) => Boolean(req.cookies.get(name)?.value));
+}
+
+export function proxy(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+
+  if (pathname === "/login") {
+    return NextResponse.next();
+  }
+
+  if (!hasSessionCookie(req)) {
+    const loginUrl = new URL("/login", req.url);
+    loginUrl.searchParams.set("callbackUrl", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|api/auth|api/webhooks).*)"],
