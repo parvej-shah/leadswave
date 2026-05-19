@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { RunFollowupsButton } from "./run-followups-button";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -48,9 +49,12 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold" style={{ color: "oklch(0.92 0 0)", letterSpacing: "-0.02em" }}>
-        Dashboard
-      </h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold" style={{ color: "oklch(0.92 0 0)", letterSpacing: "-0.02em" }}>
+          Dashboard
+        </h1>
+        <RunFollowupsButton />
+      </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-5 gap-3">
