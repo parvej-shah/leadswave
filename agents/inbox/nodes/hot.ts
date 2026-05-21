@@ -49,17 +49,33 @@ Their latest reply: "${state.inboundEmail.body}"
 Is this reply CONFIRMING they want to book (e.g. "option 1", "yes", "that works", "let's do it"), or just expressing general interest for the first time?
 Respond JSON: {"confirming": true/false, "slotIndex": 0}  (slotIndex 0-based: which slot they picked, default 0 if unclear)`;
 
-  let isConfirmation = false;
+  // Fast regex check first — catches "option 1/2/3", "that works", "let's do it", etc.
+  const CONFIRM_REGEX = /\b(option\s*[123one two three]|that works|let'?s (do it|confirm|book|go with)|sounds (great|perfect|good)|confirmed?|perfect|i'?ll take|slot [123]|works (for me|perfectly|great))\b/i;
+  const SLOT_REGEX = /\b(option\s*|slot\s*)?([123]|one|two|three)\b/i;
+
+  let isConfirmation = priorSlotProposal ? CONFIRM_REGEX.test(state.inboundEmail.body) : false;
   let slotIndex = 0;
-  try {
-    const raw = await generateText(confirmCheckPrompt);
-    const m = raw.match(/\{[\s\S]*\}/);
-    if (m) {
-      const parsed = JSON.parse(m[0]) as { confirming: boolean; slotIndex: number };
-      isConfirmation = parsed.confirming === true;
-      slotIndex = Math.max(0, Math.min(2, parsed.slotIndex ?? 0));
+
+  if (isConfirmation) {
+    const slotMatch = state.inboundEmail.body.match(SLOT_REGEX);
+    if (slotMatch) {
+      const raw = slotMatch[2].toLowerCase();
+      slotIndex = raw === "2" || raw === "two" ? 1 : raw === "3" || raw === "three" ? 2 : 0;
     }
-  } catch { /* default: not a confirmation */ }
+  }
+
+  // Fall back to AI if regex didn't match and we have a prior proposal
+  if (!isConfirmation && priorSlotProposal) {
+    try {
+      const raw = await generateText(confirmCheckPrompt);
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (m) {
+        const parsed = JSON.parse(m[0]) as { confirming: boolean; slotIndex: number };
+        isConfirmation = parsed.confirming === true;
+        slotIndex = Math.max(0, Math.min(2, parsed.slotIndex ?? 0));
+      }
+    } catch { /* quota exhausted or error — regex result stands */ }
+  }
 
   if (isConfirmation) {
     const slot = slots[slotIndex] ?? slots[0];
