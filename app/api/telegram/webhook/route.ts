@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { sendTelegramMessage } from "@/lib/telegram";
 
 type TelegramUpdate = {
   message?: {
@@ -56,18 +55,7 @@ async function getStatus(): Promise<string> {
   ].join("\n");
 }
 
-// Verify the request is from Telegram using the bot token hash
-// For simplicity in MVP we check a shared secret set as the webhook secret token
-function isAuthorized(req: NextRequest): boolean {
-  const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
-  if (!secret) return true; // dev: no secret, allow all
-  return req.headers.get("x-telegram-bot-api-secret-token") === secret;
-}
-
 export async function POST(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
 
   let update: TelegramUpdate;
   try {

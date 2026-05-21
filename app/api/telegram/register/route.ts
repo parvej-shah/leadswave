@@ -7,7 +7,6 @@ export async function GET() {
 
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-  const secret = process.env.TELEGRAM_WEBHOOK_SECRET ?? "";
 
   if (!token) return NextResponse.json({ error: "TELEGRAM_BOT_TOKEN not set" }, { status: 500 });
   if (!appUrl) return NextResponse.json({ error: "NEXT_PUBLIC_APP_URL not set" }, { status: 500 });
@@ -24,7 +23,6 @@ export async function GET() {
     url: webhookUrl,
     allowed_updates: JSON.stringify(["message"]),
   };
-  if (secret) body.secret_token = secret;
 
   const res = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
     method: "POST",
