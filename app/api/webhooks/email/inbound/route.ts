@@ -62,15 +62,13 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Load settings for this lead's campaign owner
-  // Settings are keyed by userId — we find via campaign (which is owned by the user)
-  // Since this is a single-tenant MVP, fetch the first settings row with an anthropic key
+  // Single-tenant MVP: pick the most complete settings row (prefer one with resendApiKey)
   const settings = await db.settings.findFirst({
-    where: { anthropicApiKey: { not: null } },
-  });
+    where: { resendApiKey: { not: null } },
+  }) ?? await db.settings.findFirst();
 
   if (!settings) {
-    console.error("[inbound] No settings with Anthropic key found — cannot classify");
+    console.error("[inbound] No settings found — cannot classify");
     return NextResponse.json({ ok: true, classified: false });
   }
 
@@ -78,7 +76,7 @@ export async function POST(req: NextRequest) {
     await inboxGraph.invoke({
       leadId: lead.id,
       inboundEmail: { from: fromEmail, subject, body, inReplyTo },
-      anthropicApiKey: settings.anthropicApiKey!,
+      anthropicApiKey: settings.anthropicApiKey ?? "",
       telegramChatId: settings.telegramChatId ?? "",
     });
     console.log(`[inbound] Inbox agent completed for lead ${lead.id}`);
