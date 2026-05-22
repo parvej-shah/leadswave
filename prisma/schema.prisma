@@ -93,3 +93,12 @@ model Suppression {
   reason    String   // bounced | unsubscribed | manual | complained
   createdAt DateTime @default(now())
 }
+
+model PendingConfirmation {
+  id          String   @id @default(cuid())
+  leadId      String
+  type        String   // "booking" | "reply"
+  context     String   // JSON: { slots, slotIndex, inboundBody, companyName, ... }
+  status      String   @default("pending") // pending | confirmed | skipped
+  createdAt   DateTime @default(now())
+}
