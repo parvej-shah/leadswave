@@ -2,38 +2,47 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { inboxGraph } from "@/agents/inbox/graph";
 
-type ResendInboundPayload = {
+type EmailPayload = {
   from: string;
-  to: string[];
+  to: string | string[];
   subject: string;
   text?: string;
   html?: string;
   headers?: Record<string, string>;
 };
 
+// Resend webhook wraps inbound emails: { type: "email.received", data: { email: {...} } }
+type ResendWebhookPayload = {
+  type?: string;
+  data?: { email?: EmailPayload };
+} & Partial<EmailPayload>;
+
 function extractEmail(addr: string): string {
   const m = addr.match(/<([^>]+)>/);
   return (m ? m[1] : addr).toLowerCase().trim();
 }
 
-function extractBody(payload: ResendInboundPayload): string {
-  if (payload.text) return payload.text.trim();
-  if (payload.html) return payload.html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+function extractBody(email: EmailPayload): string {
+  if (email.text) return email.text.trim();
+  if (email.html) return email.html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
   return "";
 }
 
 export async function POST(req: NextRequest) {
-  let payload: ResendInboundPayload;
+  let raw: ResendWebhookPayload;
   try {
-    payload = await req.json() as ResendInboundPayload;
+    raw = await req.json() as ResendWebhookPayload;
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const fromEmail = extractEmail(payload.from ?? "");
-  const subject = payload.subject ?? "";
-  const body = extractBody(payload);
-  const inReplyTo = payload.headers?.["in-reply-to"] ?? payload.headers?.["In-Reply-To"] ?? null;
+  // Handle both Resend webhook format { data: { email: {...} } } and direct format { from, subject, ... }
+  const email: EmailPayload = (raw.data?.email ?? raw) as EmailPayload;
+
+  const fromEmail = extractEmail(email.from ?? "");
+  const subject = email.subject ?? "";
+  const body = extractBody(email);
+  const inReplyTo = email.headers?.["in-reply-to"] ?? email.headers?.["In-Reply-To"] ?? null;
 
   if (!fromEmail) {
     return NextResponse.json({ error: "Missing from address" }, { status: 400 });
