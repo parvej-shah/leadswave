@@ -11,10 +11,10 @@ type EmailPayload = {
   headers?: Record<string, string>;
 };
 
-// Resend webhook wraps inbound emails: { type: "email.received", data: { email: {...} } }
+// Resend webhook wraps inbound emails: { type: "email.received", data: { from, subject, ... } }
 type ResendWebhookPayload = {
   type?: string;
-  data?: { email?: EmailPayload };
+  data?: EmailPayload;
 } & Partial<EmailPayload>;
 
 function extractEmail(addr: string): string {
@@ -36,8 +36,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // Handle both Resend webhook format { data: { email: {...} } } and direct format { from, subject, ... }
-  const email: EmailPayload = (raw.data?.email ?? raw) as EmailPayload;
+  // Resend webhook format: { type: "email.received", data: { from, subject, ... } }
+  // Fallback: direct format { from, subject, ... } used in manual curl tests
+  const email: EmailPayload = (raw.data ?? raw) as EmailPayload;
 
   const fromEmail = extractEmail(email.from ?? "");
   const subject = email.subject ?? "";
