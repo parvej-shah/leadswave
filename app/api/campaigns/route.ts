@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getSystemSettings } from "@/lib/settings";
 
 async function getUserId() {
   const session = await auth();
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "name, query, and location are required" }, { status: 400 });
   }
 
-  const settings = await db.settings.findUnique({ where: { userId } });
+  const settings = await getSystemSettings();
 
   const campaign = await db.campaign.create({
     data: {

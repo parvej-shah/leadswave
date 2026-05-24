@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Resend } from "resend";
+import { getSystemSettings } from "@/lib/settings";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
 
   const [lead, settings] = await Promise.all([
     db.lead.findUnique({ where: { id: leadId } }),
-    db.settings.findUnique({ where: { userId } }),
+    getSystemSettings(),
   ]);
 
   if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getSystemSettings } from "@/lib/settings";
 
 async function getUserId() {
   const session = await auth();
@@ -11,8 +12,8 @@ export async function GET() {
   const userId = await getUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const settings = await db.settings.findUnique({ where: { userId } });
-  return NextResponse.json(settings ?? {});
+  const settings = await getSystemSettings();
+  return NextResponse.json(settings);
 }
 
 export async function PUT(request: NextRequest) {
@@ -27,16 +28,28 @@ export async function PUT(request: NextRequest) {
     "googleClientId", "googleClientSecret", "googleRefreshToken",
   ] as const;
 
-  const data: Record<string, unknown> = {};
+  const data: Record<string, any> = {};
   for (const key of allowed) {
     if (key in body) data[key] = body[key];
   }
 
-  const settings = await db.settings.upsert({
-    where: { userId },
-    update: data,
-    create: { userId, ...data },
-  });
+  // Find the first settings record
+  let settings = await db.settings.findFirst();
+
+  if (settings) {
+    settings = await db.settings.update({
+      where: { id: settings.id },
+      data,
+    });
+  } else {
+    settings = await db.settings.create({
+      data: {
+        userId,
+        ...data,
+      },
+    });
+  }
 
   return NextResponse.json(settings);
 }
+

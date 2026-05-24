@@ -2,19 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { scoutGraph } from "@/agents/scout/graph";
+import { getSystemSettings } from "@/lib/settings";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const userId = session.user.id;
 
   const { campaignId } = await req.json();
   if (!campaignId) return NextResponse.json({ error: "campaignId required" }, { status: 400 });
 
   const [campaign, settings] = await Promise.all([
     db.campaign.findUnique({ where: { id: campaignId } }),
-    db.settings.findUnique({ where: { userId } }),
+    getSystemSettings(),
   ]);
+
 
   if (!campaign) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
   if (!settings?.firecrawlApiKey)

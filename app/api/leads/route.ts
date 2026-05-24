@@ -40,3 +40,37 @@ export async function DELETE(req: NextRequest) {
   await db.lead.update({ where: { id }, data: { deletedAt: new Date() } });
   return NextResponse.json({ ok: true });
 }
+
+export async function PATCH(req: NextRequest) {
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  try {
+    const body = await req.json();
+    const { id, companyName, email, website, state } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: "Lead ID is required" }, { status: 400 });
+    }
+
+    const updated = await db.lead.update({
+      where: { id },
+      data: {
+        ...(companyName !== undefined ? { companyName } : {}),
+        ...(email !== undefined ? { email: email ? email.trim() : null } : {}),
+        ...(website !== undefined ? { website: website ? website.trim() : null } : {}),
+        ...(state !== undefined ? { state } : {}),
+      },
+      include: {
+        campaign: { select: { name: true } },
+        _count: { select: { messages: true } },
+      },
+    });
+
+    return NextResponse.json(updated);
+  } catch (error: any) {
+    console.error("Failed to update lead:", error);
+    return NextResponse.json({ error: error.message || "Failed to update lead" }, { status: 500 });
+  }
+}
+
