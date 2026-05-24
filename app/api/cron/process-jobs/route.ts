@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   });
 
   if (jobs.length === 0) {
-    return NextResponse.json({ ok: true, processed: 0 });
+    return NextResponse.json({ ok: true, processed: 0, failed: 0, total: 0 });
   }
 
   const settings = await db.settings.findFirst({

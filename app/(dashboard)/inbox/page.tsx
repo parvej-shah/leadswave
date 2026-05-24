@@ -393,53 +393,51 @@ export default function InboxPage() {
               ))}
           </div>
 
-          {/* Reply composer — shown for warm leads or when draft still present */}
-          {(classifyLead(selected) === "warm" || draftText) && (
-            <div
-              className="border-t shrink-0 px-5 py-4 flex flex-col gap-3"
-              style={{ borderColor: "oklch(0.18 0 0)", background: "oklch(0.10 0 0)" }}
-            >
-              {draftText && (
-                <p className="text-xs" style={{ color: "oklch(0.55 0.12 260)", ...mono }}>
-                  AI draft · edit before sending
-                </p>
-              )}
-              <textarea
-                className="w-full rounded px-3 py-2 text-xs resize-none focus:outline-none"
+          {/* Reply composer — always shown for inbox leads */}
+          <div
+            className="border-t shrink-0 px-5 py-4 flex flex-col gap-3"
+            style={{ borderColor: "oklch(0.18 0 0)", background: "oklch(0.10 0 0)" }}
+          >
+            {draftText && (
+              <p className="text-xs" style={{ color: "oklch(0.55 0.12 260)", ...mono }}>
+                AI draft · edit before sending
+              </p>
+            )}
+            <textarea
+              className="w-full rounded px-3 py-2 text-xs resize-none focus:outline-none"
+              style={{
+                background: "oklch(0.13 0 0)",
+                border: "1px solid oklch(0.22 0 0)",
+                color: "oklch(0.80 0 0)",
+                minHeight: "90px",
+                ...mono,
+                lineHeight: 1.6,
+              }}
+              placeholder="Write your reply…"
+              value={draftText}
+              onChange={(e) => setDraftText(e.target.value)}
+            />
+            {sendError && (
+              <p className="text-xs" style={{ color: "oklch(0.62 0.18 25)", ...mono }}>
+                {sendError}
+              </p>
+            )}
+            <div className="flex justify-end">
+              <button
+                onClick={handleSendReply}
+                disabled={sending || !draftText.trim()}
+                className="px-4 py-1.5 rounded text-xs font-medium transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{
-                  background: "oklch(0.13 0 0)",
-                  border: "1px solid oklch(0.22 0 0)",
-                  color: "oklch(0.80 0 0)",
-                  minHeight: "90px",
+                  background: "oklch(0.22 0.05 145)",
+                  color: "oklch(0.78 0.18 145)",
+                  border: "1px solid oklch(0.30 0.08 145)",
                   ...mono,
-                  lineHeight: 1.6,
                 }}
-                placeholder="Write your reply…"
-                value={draftText}
-                onChange={(e) => setDraftText(e.target.value)}
-              />
-              {sendError && (
-                <p className="text-xs" style={{ color: "oklch(0.62 0.18 25)", ...mono }}>
-                  {sendError}
-                </p>
-              )}
-              <div className="flex justify-end">
-                <button
-                  onClick={handleSendReply}
-                  disabled={sending || !draftText.trim()}
-                  className="px-4 py-1.5 rounded text-xs font-medium transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{
-                    background: "oklch(0.22 0.05 145)",
-                    color: "oklch(0.78 0.18 145)",
-                    border: "1px solid oklch(0.30 0.08 145)",
-                    ...mono,
-                  }}
-                >
-                  {sending ? "Sending…" : "Send Reply"}
-                </button>
-              </div>
+              >
+                {sending ? "Sending…" : "Send Reply"}
+              </button>
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>

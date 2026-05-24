@@ -85,6 +85,8 @@ export default function LeadsPage() {
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
+  const SENT_STATES = new Set(["contacted", "replied", "converted", "meeting_booked", "unsubscribed", "bounced"]);
+
   async function handleSend(id: string) {
     setSending(id);
     setSendError(null);
@@ -95,7 +97,7 @@ export default function LeadsPage() {
     });
     setSending(null);
     if (!res.ok) {
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       setSendError({ id, msg: data.error ?? "Send failed" });
     } else {
       setLeads((prev) =>
@@ -298,8 +300,8 @@ export default function LeadsPage() {
                   <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => handleSend(lead.id)}
-                    disabled={sending === lead.id || lead.state === "contacted" || !lead.email}
-                    title={!lead.email ? "No email address" : lead.state === "contacted" ? "Already contacted" : "Send personalized email"}
+                    disabled={sending === lead.id || SENT_STATES.has(lead.state) || !lead.email}
+                    title={!lead.email ? "No email address" : SENT_STATES.has(lead.state) ? `Already ${lead.state}` : "Send personalized email"}
                     className="px-2 py-1 rounded text-xs font-medium transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{
                       background: "oklch(0.20 0.04 65)",

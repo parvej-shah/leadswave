@@ -176,7 +176,6 @@ export async function POST(req: NextRequest) {
 
   if (command === "/start") {
     await db.settings.updateMany({
-      where: { telegramChatId: null },
       data: { telegramChatId: String(chatId) },
     });
     await replyToChat(

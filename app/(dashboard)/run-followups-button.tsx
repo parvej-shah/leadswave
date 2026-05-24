@@ -12,7 +12,7 @@ export function RunFollowupsButton() {
     setState("running");
     setResult(null);
     try {
-      const res = await fetch("/api/cron/process-jobs");
+      const res = await fetch("/api/run-followups", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed");
       setResult({ processed: data.processed, failed: data.failed, total: data.total });

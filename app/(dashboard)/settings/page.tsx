@@ -49,6 +49,11 @@ function Skeleton({ className = "", style }: { className?: string; style?: React
 const AMBER = "oklch(0.78 0.18 65)";
 const AMBER_DIM = "oklch(0.55 0.14 65)";
 
+const focusStyle = {
+  borderColor: AMBER,
+  boxShadow: `0 0 0 1px ${AMBER}22`,
+};
+
 const inputStyle = {
   background: "oklch(0.13 0 0)",
   borderWidth: "1px",
@@ -60,6 +65,117 @@ const inputStyle = {
   outline: "none",
   transition: "border-color 0.15s",
 } as React.CSSProperties;
+
+function FocusInput({
+  type = "text",
+  value,
+  onChange,
+  placeholder = "",
+  readOnly = false,
+  min,
+  max,
+}: {
+  type?: string;
+  value: string | number;
+  onChange?: (v: string) => void;
+  placeholder?: string;
+  readOnly?: boolean;
+  min?: number;
+  max?: number;
+}) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <input
+      type={type}
+      value={value}
+      onChange={onChange ? (e) => onChange(e.target.value) : undefined}
+      placeholder={placeholder}
+      readOnly={readOnly}
+      min={min}
+      max={max}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        ...inputStyle,
+        ...(focused ? focusStyle : {}),
+        ...(readOnly ? { color: "oklch(0.50 0 0)", cursor: "default" } : {}),
+      }}
+      className="w-full px-3 py-2 rounded"
+    />
+  );
+}
+
+function FocusTextarea({
+  value,
+  onChange,
+  placeholder = "",
+  rows = 5,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  rows?: number;
+}) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      rows={rows}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        ...inputStyle,
+        ...(focused ? focusStyle : {}),
+        resize: "vertical",
+      }}
+      className="w-full px-3 py-2 rounded"
+    />
+  );
+}
+
+function SecretInput({
+  value,
+  onChange,
+  placeholder,
+  show,
+  onToggle,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  show: boolean;
+  onToggle: () => void;
+}) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <div className="relative">
+      <input
+        type={show ? "text" : "password"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{
+          ...inputStyle,
+          ...(focused ? focusStyle : {}),
+          paddingRight: "2.5rem",
+        }}
+        className="w-full px-3 py-2 rounded"
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{ color: "oklch(0.45 0 0)" }}
+        className="absolute right-3 top-1/2 -translate-y-1/2 hover:opacity-80 transition-opacity"
+      >
+        <EyeIcon open={show} />
+      </button>
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const searchParams = useSearchParams();
@@ -142,122 +258,6 @@ export default function SettingsPage() {
     } finally {
       setSaving(false);
     }
-  }
-
-  const focusStyle = {
-    borderColor: AMBER,
-    boxShadow: `0 0 0 1px ${AMBER}22`,
-  };
-
-  function FocusInput({
-    type = "text",
-    value,
-    onChange,
-    placeholder = "",
-    readOnly = false,
-    min,
-    max,
-  }: {
-    type?: string;
-    value: string | number;
-    onChange?: (v: string) => void;
-    placeholder?: string;
-    readOnly?: boolean;
-    min?: number;
-    max?: number;
-  }) {
-    const [focused, setFocused] = useState(false);
-    return (
-      <input
-        type={type}
-        value={value}
-        onChange={onChange ? (e) => onChange(e.target.value) : undefined}
-        placeholder={placeholder}
-        readOnly={readOnly}
-        min={min}
-        max={max}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        style={{
-          ...inputStyle,
-          ...(focused ? focusStyle : {}),
-          ...(readOnly ? { color: "oklch(0.50 0 0)", cursor: "default" } : {}),
-        }}
-        className="w-full px-3 py-2 rounded"
-      />
-    );
-  }
-
-  function FocusTextarea({
-    value,
-    onChange,
-    placeholder = "",
-    rows = 5,
-  }: {
-    value: string;
-    onChange: (v: string) => void;
-    placeholder?: string;
-    rows?: number;
-  }) {
-    const [focused, setFocused] = useState(false);
-    return (
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        rows={rows}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        style={{
-          ...inputStyle,
-          ...(focused ? focusStyle : {}),
-          resize: "vertical",
-        }}
-        className="w-full px-3 py-2 rounded"
-      />
-    );
-  }
-
-  function SecretInput({
-    value,
-    onChange,
-    placeholder,
-    show,
-    onToggle,
-  }: {
-    value: string;
-    onChange: (v: string) => void;
-    placeholder: string;
-    show: boolean;
-    onToggle: () => void;
-  }) {
-    const [focused, setFocused] = useState(false);
-    return (
-      <div className="relative">
-        <input
-          type={show ? "text" : "password"}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          style={{
-            ...inputStyle,
-            ...(focused ? focusStyle : {}),
-            paddingRight: "2.5rem",
-          }}
-          className="w-full px-3 py-2 rounded"
-        />
-        <button
-          type="button"
-          onClick={onToggle}
-          style={{ color: "oklch(0.45 0 0)" }}
-          className="absolute right-3 top-1/2 -translate-y-1/2 hover:opacity-80 transition-opacity"
-        >
-          <EyeIcon open={show} />
-        </button>
-      </div>
-    );
   }
 
   function SectionHeader({ label, index }: { label: string; index: number }) {

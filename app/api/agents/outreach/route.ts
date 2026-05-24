@@ -23,14 +23,18 @@ export async function POST(req: NextRequest) {
   if (!settings?.fromEmail)
     return NextResponse.json({ error: "From email not configured in settings" }, { status: 400 });
 
-  const result = await outreachGraph.invoke({
-    leadId,
-    resendApiKey: settings.resendApiKey,
-    firecrawlApiKey: settings.firecrawlApiKey ?? "",
-    anthropicApiKey: settings.anthropicApiKey ?? "",
-    fromEmail: settings.fromEmail,
-    fromName: settings.fromName ?? "",
-  });
-
-  return NextResponse.json({ ok: true, sent: result.sent, subject: result.emailDraft?.subject });
+  try {
+    const result = await outreachGraph.invoke({
+      leadId,
+      resendApiKey: settings.resendApiKey,
+      firecrawlApiKey: settings.firecrawlApiKey ?? "",
+      anthropicApiKey: settings.anthropicApiKey ?? "",
+      fromEmail: settings.fromEmail,
+      fromName: settings.fromName ?? "",
+    });
+    return NextResponse.json({ ok: true, sent: result.sent, subject: result.emailDraft?.subject });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
