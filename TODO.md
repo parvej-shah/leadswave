@@ -58,10 +58,9 @@ listed here so it isn't forgotten, but not currently blocking.
 
 - [ ] **Inbox keyboard shortcuts (J/K/R/E)**
       DS reference wires `j`/`k` to navigate threads, `r` to focus composer,
-      `e` to archive. Need to add `<Kbd>` hints in the list footer and a
-      `keydown` handler scoped to the inbox route. Low cost — defer until
-      the rest of the surface is migrated so we can hook shortcuts globally
-      (alongside the command palette PR).
+      `e` to archive. Add `<Kbd>` hints in the list footer and a `keydown`
+      handler scoped to the Inbox route. The global ⌘K palette is already
+      shipped — these are page-local shortcuts on top of it.
 
 - [ ] **Composer "Insert calendar link" / Signature buttons**
       Toolbar below the textarea in the DS reference. Needs: (a) decision on
@@ -101,3 +100,26 @@ listed here so it isn't forgotten, but not currently blocking.
       only Telegram chat ID is wired (and only as a read-only auto-detected
       value). Needs: (a) a daily digest job, (b) a notification-preferences
       field on Settings, (c) wiring HOT-only into the Telegram alert path.
+
+## Command Palette (⌘K)
+
+- [ ] **Lead search inside the palette**
+      Currently the palette lists navigation, the 5 most recent campaigns,
+      and a couple of actions. To search across all leads (by company /
+      email) we need either: (a) a `/api/search` endpoint that the palette
+      hits on debounced query, or (b) preloading lead names into the
+      layout payload (only viable for small accounts). Pick after we see
+      how big real accounts get.
+
+- [ ] **Recent commands / fuzzy ranking**
+      Today the palette filter is a plain substring `includes`. Real
+      palettes rank by recency + fuzzy match (e.g. fzf-style subsequence
+      scoring). Add a `localStorage`-backed recents list and a small
+      scorer when the command set grows past ~20 items.
+
+- [ ] **`G D` / `G C` / `G L` / `G I` / `G S` two-key navigation**
+      Sidebar already advertises these key hints in tooltips. Wire a
+      global two-key sequence handler (press `g`, then within 800ms press
+      destination key) so the hints become real shortcuts. Skip inside
+      inputs/textareas. Pair with the Inbox J/K/R/E item above — both want
+      the same "skip when typing" guard.

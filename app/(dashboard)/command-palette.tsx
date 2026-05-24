@@ -327,6 +327,3 @@ export function CommandPalette({ campaigns }: CommandPaletteProps) {
   );
 }
 
-// Silence the linter for the storage key; the constant is reserved for a future
-// "recent commands" feature but unused today.
-void STORAGE_KEY_OPEN;

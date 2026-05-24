@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Sidebar, type SidebarCampaign } from "./sidebar";
+import { CommandPalette } from "./command-palette";
 
 export default async function DashboardLayout({
   children,
@@ -39,6 +40,7 @@ export default async function DashboardLayout({
         inboxHotCount={inboxHotCount}
       />
       <main className="flex-1 p-6 overflow-auto min-w-0">{children}</main>
+      <CommandPalette campaigns={campaigns.map((c) => ({ id: c.id, name: c.name }))} />
     </div>
   );
 }

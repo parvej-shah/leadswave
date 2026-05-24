@@ -171,11 +171,14 @@ function WorkspaceHeader({ collapsed }: { collapsed: boolean }) {
 }
 
 function SearchTrigger({ collapsed }: { collapsed: boolean }) {
-  // ⌘K palette is a future PR; this is a visual trigger only.
+  function open() {
+    window.dispatchEvent(new CustomEvent("lw:open-command"));
+  }
   if (collapsed) {
     return (
       <button
         type="button"
+        onClick={open}
         title="Search ⌘K"
         className="w-10 h-8 flex items-center justify-center bg-[oklch(0.12_0_0)] border border-border hover:border-[oklch(0.20_0_0)] text-fg-4 hover:text-fg-3 rounded-md transition-colors duration-150 cursor-pointer"
       >
@@ -186,6 +189,7 @@ function SearchTrigger({ collapsed }: { collapsed: boolean }) {
   return (
     <button
       type="button"
+      onClick={open}
       className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-[oklch(0.12_0_0)] border border-border hover:border-[oklch(0.20_0_0)] text-fg-4 hover:text-fg-3 cursor-pointer font-mono text-[12px] text-left transition-colors duration-150"
     >
       <Icon name="search" size={12} />
