@@ -10,6 +10,8 @@ export default function NewCampaignPage() {
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState("");
   const [savedCount, setSavedCount] = useState(0);
+  const [keywords, setKeywords] = useState("");
+  const [generatingDescription, setGeneratingDescription] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -77,6 +79,37 @@ export default function NewCampaignPage() {
     setStatus("done");
 
     setTimeout(() => router.push(`/campaigns`), 2000);
+  }
+
+  async function handleGenerateDescription() {
+    if (!keywords.trim()) {
+      setError("Add a few keywords first, then click AI Write.");
+      return;
+    }
+    setError("");
+    setGeneratingDescription(true);
+    try {
+      const res = await fetch("/api/campaigns/description-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keywords,
+          campaignName: form.name,
+          query: form.query,
+          location: form.location,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Failed to generate description");
+        return;
+      }
+      setForm((f) => ({ ...f, offerText: data.draft ?? f.offerText }));
+    } catch {
+      setError("Failed to generate description");
+    } finally {
+      setGeneratingDescription(false);
+    }
   }
 
   const inputCls =
@@ -149,6 +182,24 @@ export default function NewCampaignPage() {
 
           <div>
             <label className={labelCls}>Offer description</label>
+            <div className="flex items-center gap-2 mb-2">
+              <input
+                className={`${inputCls} flex-1`}
+                placeholder="Keywords for AI (e.g. MVP development, SaaS founders, rapid launch)"
+                value={keywords}
+                onChange={(e) => setKeywords(e.target.value)}
+                disabled={status !== "idle" && status !== "error"}
+              />
+              <button
+                type="button"
+                onClick={handleGenerateDescription}
+                disabled={(status !== "idle" && status !== "error") || generatingDescription}
+                className="px-3 py-2 rounded text-xs border border-zinc-700 text-zinc-200 hover:border-zinc-500 disabled:opacity-60 transition-colors"
+                style={{ fontFamily: "'DM Mono', monospace" }}
+              >
+                {generatingDescription ? "AI Writing..." : "AI Write"}
+              </button>
+            </div>
             <textarea
               className={`${inputCls} resize-none h-24`}
               placeholder="What are you offering? AI will personalize this per lead."

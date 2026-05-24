@@ -35,6 +35,8 @@ export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [runningId, setRunningId] = useState<string | null>(null);
+  const [rowMessage, setRowMessage] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetch("/api/campaigns")
@@ -48,6 +50,34 @@ export default function CampaignsPage() {
         setLoading(false);
       });
   }, []);
+
+  async function rerunScout(campaignId: string) {
+    setRowMessage((m) => ({ ...m, [campaignId]: "" }));
+    setRunningId(campaignId);
+    try {
+      const res = await fetch("/api/agents/scout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campaignId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setRowMessage((m) => ({ ...m, [campaignId]: data.error ?? "Scout failed" }));
+        return;
+      }
+      setRowMessage((m) => ({
+        ...m,
+        [campaignId]: `Scout complete. ${data.savedCount ?? 0} leads saved.`,
+      }));
+      const listRes = await fetch("/api/campaigns");
+      const listData = await listRes.json();
+      setCampaigns(Array.isArray(listData) ? listData : []);
+    } catch {
+      setRowMessage((m) => ({ ...m, [campaignId]: "Scout failed" }));
+    } finally {
+      setRunningId(null);
+    }
+  }
 
   return (
     <div>
@@ -101,49 +131,68 @@ export default function CampaignsPage() {
       ) : (
         <div className="flex flex-col gap-2">
           {campaigns.map((c) => (
-            <div
-              key={c.id}
-              className="flex items-center gap-4 px-4 py-3 rounded border border-zinc-800 bg-zinc-900/40 hover:border-zinc-700 transition-colors"
-            >
-              <div className="flex-1 min-w-0">
-                <p
-                  className="text-sm font-medium text-zinc-100 truncate"
-                  style={{ fontFamily: "'DM Mono', monospace" }}
-                >
-                  {c.name}
-                </p>
-                <p className="text-xs text-zinc-500 truncate mt-0.5">
-                  {c.query} · {c.location}
-                </p>
+            <div key={c.id} className="rounded border border-zinc-800 bg-zinc-900/40 hover:border-zinc-700 transition-colors px-4 py-3">
+              <div className="flex items-center gap-4">
+                <div className="flex-1 min-w-0">
+                  <p
+                    className="text-sm font-medium text-zinc-100 truncate"
+                    style={{ fontFamily: "'DM Mono', monospace" }}
+                  >
+                    {c.name}
+                  </p>
+                  <p className="text-xs text-zinc-500 truncate mt-0.5">
+                    {c.query} · {c.location}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3 shrink-0">
+                  <StatusBadge status={c.status} />
+
+                  <span
+                    className="text-xs text-zinc-400"
+                    style={{ fontFamily: "'DM Mono', monospace" }}
+                  >
+                    {c._count.leads} leads
+                  </span>
+
+                  <span className="text-xs text-zinc-600">
+                    {new Date(c.createdAt).toLocaleDateString()}
+                  </span>
+
+                  <button
+                    onClick={() => rerunScout(c.id)}
+                    disabled={runningId === c.id}
+                    className="px-2 py-1 rounded text-xs border border-zinc-700 text-zinc-200 hover:border-zinc-500 disabled:opacity-60 transition-colors"
+                    style={{ fontFamily: "'DM Mono', monospace" }}
+                  >
+                    {runningId === c.id ? "Scouting..." : "Re-run Scout"}
+                  </button>
+
+                  <Link
+                    href={`/campaigns/${c.id}/edit`}
+                    className="px-2 py-1 rounded text-xs border border-zinc-700 text-zinc-300 hover:border-zinc-500 transition-colors"
+                    style={{ fontFamily: "'DM Mono', monospace" }}
+                  >
+                    Edit
+                  </Link>
+
+                  <Link
+                    href={`/campaigns/${c.id}/import`}
+                    className="px-2 py-1 rounded text-xs transition-opacity hover:opacity-90"
+                    style={{
+                      background: "oklch(0.18 0.03 65)",
+                      color: "oklch(0.78 0.18 65)",
+                      border: "1px solid oklch(0.28 0.06 65)",
+                      fontFamily: "'DM Mono', monospace",
+                    }}
+                  >
+                    Import CSV
+                  </Link>
+                </div>
               </div>
-
-              <div className="flex items-center gap-3 shrink-0">
-                <StatusBadge status={c.status} />
-
-                <span
-                  className="text-xs text-zinc-400"
-                  style={{ fontFamily: "'DM Mono', monospace" }}
-                >
-                  {c._count.leads} leads
-                </span>
-
-                <span className="text-xs text-zinc-600">
-                  {new Date(c.createdAt).toLocaleDateString()}
-                </span>
-
-                <Link
-                  href={`/campaigns/${c.id}/import`}
-                  className="px-2 py-1 rounded text-xs transition-opacity hover:opacity-90"
-                  style={{
-                    background: "oklch(0.18 0.03 65)",
-                    color: "oklch(0.78 0.18 65)",
-                    border: "1px solid oklch(0.28 0.06 65)",
-                    fontFamily: "'DM Mono', monospace",
-                  }}
-                >
-                  Import CSV
-                </Link>
-              </div>
+              {rowMessage[c.id] ? (
+                <p className="text-xs text-zinc-500 mt-2">{rowMessage[c.id]}</p>
+              ) : null}
             </div>
           ))}
         </div>
