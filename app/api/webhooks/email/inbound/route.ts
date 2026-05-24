@@ -43,6 +43,37 @@ function extractBody(email: EmailPayload): string {
   return "";
 }
 
+function stripQuotedReply(raw: string): string {
+  const text = raw.replace(/\r/g, "").trim();
+  if (!text) return "";
+
+  const lines = text.split("\n");
+  const cleaned: string[] = [];
+
+  for (const line of lines) {
+    const t = line.trim();
+
+    // Stop at common reply-header markers (gmail/outlook/apple mail, etc.)
+    if (
+      /^on .+wrote:$/i.test(t) ||
+      /^from:\s/i.test(t) ||
+      /^sent:\s/i.test(t) ||
+      /^subject:\s/i.test(t) ||
+      /^to:\s/i.test(t) ||
+      /^-+\s*forwarded message\s*-+$/i.test(t) ||
+      /^<.+>\s*লিখেছেন:$/i.test(t)
+    ) {
+      break;
+    }
+
+    // Skip quoted lines from previous thread.
+    if (t.startsWith(">")) continue;
+    cleaned.push(line);
+  }
+
+  return cleaned.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 export async function POST(req: NextRequest) {
   let raw: ResendWebhookPayload;
   try {
@@ -91,6 +122,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  body = stripQuotedReply(body);
   console.log(`[inbound] from=${fromEmail} subject="${subject}" in-reply-to=${inReplyTo} bodyLen=${body.length}`);
 
   // Find the lead by email
@@ -104,7 +136,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, skipped: true });
   }
 
-  // Save inbound message
+  if (!settings) {
+    console.error("[inbound] No settings found — cannot classify");
+    return NextResponse.json({ ok: true, classified: false });
+  }
+
+  if (!body) {
+    console.warn(`[inbound] Empty body for lead ${lead.id}; skipping save/classification to avoid false state updates`);
+    return NextResponse.json({ ok: true, classified: false, leadId: lead.id, reason: "empty_body" });
+  }
+
+  // Save inbound message only when we have meaningful content.
   await db.message.create({
     data: {
       leadId: lead.id,
@@ -113,16 +155,6 @@ export async function POST(req: NextRequest) {
       body,
     },
   });
-
-  if (!settings) {
-    console.error("[inbound] No settings found — cannot classify");
-    return NextResponse.json({ ok: true, classified: false });
-  }
-
-  if (!body) {
-    console.warn(`[inbound] Empty body for lead ${lead.id}; skipping classification to avoid false state updates`);
-    return NextResponse.json({ ok: true, classified: false, leadId: lead.id, reason: "empty_body" });
-  }
 
   try {
     await inboxGraph.invoke({

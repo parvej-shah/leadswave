@@ -20,8 +20,8 @@ type InboxLead = {
   messages: Message[];
 };
 
-const HOT_STATES = new Set(["converted"]);
-const WARM_STATES = new Set(["replied"]);
+const HOT_STATES = new Set(["converted", "meeting_booked"]);
+const WARM_STATES = new Set(["replied", "discovered", "contacted"]);
 
 function classifyLead(lead: InboxLead): "hot" | "warm" {
   // If they've been marked converted they replied positively
@@ -132,6 +132,7 @@ export default function InboxPage() {
   const [draftText, setDraftText] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [generatingDraft, setGeneratingDraft] = useState(false);
   const [suppressed, setSuppressed] = useState<Set<string>>(new Set());
 
   const fetchLeads = useCallback(() => {
@@ -190,14 +191,35 @@ export default function InboxPage() {
     setDraftText("");
   }
 
+  async function handleAiWrite() {
+    if (!selected) return;
+    setGeneratingDraft(true);
+    setSendError(null);
+    try {
+      const res = await fetch("/api/inbox/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId: selected.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSendError(data.error ?? "Failed to generate draft");
+        return;
+      }
+      setDraftText(data.draft ?? "");
+    } catch {
+      setSendError("Failed to generate draft");
+    } finally {
+      setGeneratingDraft(false);
+    }
+  }
+
   function handleNotInterested(leadId: string) {
     setSuppressed((prev) => new Set(prev).add(leadId));
     if (selected?.id === leadId) setSelected(null);
   }
 
-  const visible = leads.filter(
-    (l) => !suppressed.has(l.id) && (l.state === "replied" || l.state === "converted")
-  );
+  const visible = leads.filter((l) => !suppressed.has(l.id));
   const hot = visible.filter((l) => classifyLead(l) === "hot");
   const warm = visible.filter((l) => classifyLead(l) === "warm");
   const ordered = [...hot, ...warm];
@@ -352,6 +374,7 @@ export default function InboxPage() {
           <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
             {selected.messages
               .filter((m) => m.direction !== "system")
+              .filter((m) => (m.body ?? "").trim().length > 0)
               .map((msg) => (
                 <div key={msg.id} className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
@@ -422,7 +445,20 @@ export default function InboxPage() {
                 {sendError}
               </p>
             )}
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={handleAiWrite}
+                disabled={generatingDraft || sending || !selected}
+                className="px-4 py-1.5 rounded text-xs font-medium transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{
+                  background: "oklch(0.16 0.02 260)",
+                  color: "oklch(0.72 0.12 260)",
+                  border: "1px solid oklch(0.26 0.05 260)",
+                  ...mono,
+                }}
+              >
+                {generatingDraft ? "AI Writing…" : "AI Write"}
+              </button>
               <button
                 onClick={handleSendReply}
                 disabled={sending || !draftText.trim()}
