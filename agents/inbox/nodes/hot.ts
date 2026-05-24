@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { sendTelegramMessage } from "@/lib/telegram";
+import { sendTelegramMessage, notifyAiFailure, escapeHtml } from "@/lib/telegram";
 import { generateText } from "@/lib/gemini";
 import { getAvailableSlots, createEvent, Slot } from "@/lib/calendar/client";
 import { BOOKING_EXAMPLES } from "@/lib/ai/training/inbox-examples";
@@ -37,6 +37,7 @@ async function getBookingDecision(
   priorSlotProposal: string,
   companyName: string,
   availableSlots: Slot[],
+  onAiFail?: (err: unknown) => Promise<void> | void,
 ): Promise<BookingDecision> {
   const slotList = availableSlots.slice(0, 3).map((s, i) => `${i + 1}. ${formatSlot(s)}`).join("\n");
 
@@ -74,6 +75,7 @@ async function getBookingDecision(
     }
   } catch (err) {
     console.error("[hot/booking] AI error:", err);
+    if (onAiFail) await onAiFail(err);
   }
 
   // AI failed — default to propose if no prior slots, unclear if slots exist
@@ -146,7 +148,7 @@ async function bookMeeting(
   if (state.telegramChatId) {
     await sendTelegramMessage(
       state.telegramChatId,
-      `📅 <b>Meeting booked with ${state.lead.companyName}</b>\n${formatSlot(slot)}${event.meetLink ? `\nGoogle Meet: ${event.meetLink}` : ""}`,
+      `📅 <b>Meeting booked with ${escapeHtml(state.lead.companyName)}</b>\n${escapeHtml(formatSlot(slot))}${event.meetLink ? `\nGoogle Meet: ${escapeHtml(event.meetLink)}` : ""}`,
     );
   }
 
@@ -166,9 +168,19 @@ Company: ${state.lead.companyName}
 Slots:\n${slotList}
 Return ONLY the email body — no subject, no sign-off.`;
 
-  const draft = await generateText(draftPrompt).catch(
-    () => `I'd love to connect! Here are a few times that work:\n\n${slotList}\n\nLet me know which suits you.`,
-  );
+  const draft = await generateText(draftPrompt).catch(async (err) => {
+    console.error("[hot/propose] AI draft failed:", err);
+    if (state.telegramChatId) {
+      await notifyAiFailure(state.telegramChatId, {
+        stage: "hot/propose-slots draft",
+        companyName: state.lead.companyName,
+        leadId: state.leadId,
+        error: err,
+        snippet: state.inboundEmail.body,
+      });
+    }
+    return `I'd love to connect! Here are a few times that work:\n\n${slotList}\n\nLet me know which suits you.`;
+  });
 
   const subject = `Re: Let's connect – ${state.lead.companyName}`;
   const body = `${draft}\n\n— ${settings.fromName ?? "The team"}`;
@@ -212,10 +224,10 @@ async function askHumanViaTelegram(
   await sendTelegramMessage(
     chatId,
     [
-      `🤔 <b>Need your input — ${state.lead.companyName}</b>`,
-      `They said: <i>"${snippet}"</i>`,
+      `🤔 <b>Need your input — ${escapeHtml(state.lead.companyName)}</b>`,
+      `They said: <i>"${escapeHtml(snippet)}"</i>`,
       ``,
-      `AI couldn't decide: ${decisionReason}`,
+      `AI couldn't decide: ${escapeHtml(decisionReason)}`,
       ``,
       `Available slots:`,
       slotList,
@@ -249,7 +261,7 @@ export async function hotNode(state: InboxState): Promise<Partial<InboxState>> {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
       await sendTelegramMessage(
         state.telegramChatId,
-        `🔥 <b>HOT LEAD: ${state.lead.companyName}</b>\nThey said: <i>${snippet}</i>\n→ ${appUrl}/inbox`,
+        `🔥 <b>HOT LEAD: ${escapeHtml(state.lead.companyName)}</b>\nThey said: <i>${escapeHtml(snippet)}</i>\n→ ${appUrl}/inbox`,
       );
     }
     return {};
@@ -271,7 +283,7 @@ export async function hotNode(state: InboxState): Promise<Partial<InboxState>> {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
       await sendTelegramMessage(
         state.telegramChatId,
-        `🔥 <b>HOT LEAD: ${state.lead.companyName}</b>\nThey said: <i>${snippet}</i>\n(Connect Google Calendar in settings to auto-book)\n→ ${appUrl}/inbox`,
+        `🔥 <b>HOT LEAD: ${escapeHtml(state.lead.companyName)}</b>\nThey said: <i>${escapeHtml(snippet)}</i>\n(Connect Google Calendar in settings to auto-book)\n→ ${appUrl}/inbox`,
       );
     }
     return {};
@@ -290,7 +302,7 @@ export async function hotNode(state: InboxState): Promise<Partial<InboxState>> {
     if (state.telegramChatId) {
       await sendTelegramMessage(
         state.telegramChatId,
-        `🔥 <b>HOT LEAD: ${state.lead.companyName}</b> wants to meet but your calendar has no free slots in the next 5 days. Handle manually.`,
+        `🔥 <b>HOT LEAD: ${escapeHtml(state.lead.companyName)}</b> wants to meet but your calendar has no free slots in the next 5 days. Handle manually.`,
       );
     }
     return {};
@@ -302,6 +314,17 @@ export async function hotNode(state: InboxState): Promise<Partial<InboxState>> {
     priorSlotProposal,
     state.lead.companyName,
     slots,
+    async (err) => {
+      if (state.telegramChatId) {
+        await notifyAiFailure(state.telegramChatId, {
+          stage: "hot/booking decision",
+          companyName: state.lead.companyName,
+          leadId: state.leadId,
+          error: err,
+          snippet: state.inboundEmail.body,
+        });
+      }
+    },
   );
 
   if (decision.decision === "confirm") {
@@ -320,7 +343,7 @@ export async function hotNode(state: InboxState): Promise<Partial<InboxState>> {
     if (state.telegramChatId) {
       await sendTelegramMessage(
         state.telegramChatId,
-        `🔥 <b>HOT LEAD: ${state.lead.companyName}</b>\nThey want to meet — slot proposal sent automatically.`,
+        `🔥 <b>HOT LEAD: ${escapeHtml(state.lead.companyName)}</b>\nThey want to meet — slot proposal sent automatically.`,
       );
     }
     return {};

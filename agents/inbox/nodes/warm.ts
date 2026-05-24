@@ -1,6 +1,6 @@
 import { generateText } from "@/lib/gemini";
 import { db } from "@/lib/db";
-import { sendTelegramMessage } from "@/lib/telegram";
+import { sendTelegramMessage, notifyAiFailure, escapeHtml } from "@/lib/telegram";
 import { InboxState } from "../graph";
 
 export async function warmNode(state: InboxState): Promise<Partial<InboxState>> {
@@ -31,7 +31,21 @@ ${thread}
 Their latest reply:
 ${state.inboundEmail.body}`;
 
-  const draftReply = await generateText(prompt).catch(() => null);
+  let draftReply: string | null = null;
+  try {
+    draftReply = await generateText(prompt);
+  } catch (err) {
+    console.error("[warm] AI draft failed:", err);
+    if (state.telegramChatId) {
+      await notifyAiFailure(state.telegramChatId, {
+        stage: "warm draft",
+        companyName: state.lead.companyName,
+        leadId: state.leadId,
+        error: err,
+        snippet: state.inboundEmail.body,
+      });
+    }
+  }
 
   if (draftReply) {
     await db.message.create({
@@ -48,7 +62,7 @@ ${state.inboundEmail.body}`;
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
     await sendTelegramMessage(
       state.telegramChatId,
-      `💬 <b>${state.lead.companyName} has a question</b>\nDraft reply ready for approval → ${appUrl}/leads`,
+      `💬 <b>${escapeHtml(state.lead.companyName)} has a question</b>\nDraft reply ready for approval → ${appUrl}/leads`,
     );
   }
 
