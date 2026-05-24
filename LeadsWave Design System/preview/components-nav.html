@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+body{margin:0;padding:18px;background:var(--canvas);display:flex;gap:14px}
+.nav{width:224px;background:var(--sidebar);border:1px solid var(--border);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:4px}
+.brand{font-family:var(--font-mono);font-size:13px;color:var(--fg-1);font-weight:600;padding:4px 8px;margin-bottom:8px}
+.item{font-family:var(--font-mono);font-size:13px;padding:6px 10px;border-radius:5px;color:var(--fg-4);display:flex;justify-content:space-between;align-items:center}
+.item.active{background:var(--amber-tinted-surface);color:var(--amber)}
+.item.has-signal{color:var(--fg-2)}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--amber);animation:p 1.4s infinite}
+@keyframes p{0%,100%{opacity:1}50%{opacity:.4}}
+.legend{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--fg-4);padding-top:8px}
+</style></head><body>
+<div class="nav">
+  <div class="brand">LeadsWave</div>
+  <div class="item active">Dashboard</div>
+  <div class="item">Campaigns</div>
+  <div class="item">Leads</div>
+  <div class="item has-signal">Inbox <span class="dot"></span></div>
+  <div class="item">Settings</div>
+  <div class="legend">↑ active state · signal pulse</div>
+</div>
+</body></html>

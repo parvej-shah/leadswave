@@ -1,0 +1,42 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+body{margin:0;padding:24px;background:var(--canvas)}
+.panel{background:oklch(0.11 0 0);border:1px solid oklch(1 0 0 / 10%);border-radius:12px;width:520px;overflow:hidden}
+.search{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)}
+.search input{flex:1;background:transparent;border:0;outline:0;color:var(--fg-1);font-family:var(--font-mono);font-size:14px}
+.section{padding:4px 0 8px}
+.section .label{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--fg-5);padding:6px 16px 4px;margin:0}
+.row{display:flex;align-items:center;gap:12px;padding:8px 16px;font-family:var(--font-mono);font-size:13px;color:var(--fg-2);border-left:2px solid transparent}
+.row.sel{background:oklch(0.16 0 0);color:var(--fg-1);border-left:2px solid var(--amber)}
+.row .ic{color:var(--fg-4)}
+.row.sel .ic{color:var(--amber)}
+.row .hint{margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--fg-5)}
+.foot{padding:8px 16px;border-top:1px solid var(--border);background:oklch(0.09 0 0);display:flex;align-items:center;gap:14px;font-family:var(--font-mono);font-size:10px;color:var(--fg-5)}
+kbd{font-family:var(--font-mono);font-size:10px;padding:1px 5px;border-radius:3px;background:oklch(0.18 0 0);color:var(--fg-3);border:1px solid oklch(0.25 0 0);border-bottom-width:2px}
+.arrow{margin-left:auto;color:var(--amber)}
+</style></head><body>
+<div class="panel">
+  <div class="search">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--fg-4)" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
+    <input value="Type a command, lead, or page…" readonly>
+    <kbd>ESC</kbd>
+  </div>
+  <div class="section">
+    <p class="label">NAVIGATE</p>
+    <div class="row sel"><span class="ic">⌂</span><span>Go to Dashboard</span><span class="hint">G D</span><span class="arrow">→</span></div>
+    <div class="row"><span class="ic">◎</span><span>Go to Campaigns</span><span class="hint">G C</span></div>
+    <div class="row"><span class="ic">⌂</span><span>Go to Inbox</span><span class="hint">G I</span></div>
+  </div>
+  <div class="section">
+    <p class="label">CREATE</p>
+    <div class="row"><span class="ic">＋</span><span>New Campaign</span><span class="hint">⇧N</span></div>
+    <div class="row"><span class="ic">↑</span><span>Import leads from CSV</span></div>
+  </div>
+  <div class="foot">
+    <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+    <span><kbd>↵</kbd> select</span>
+    <span><kbd>ESC</kbd> close</span>
+    <span style="margin-left:auto">15 commands</span>
+  </div>
+</div>
+</body></html>

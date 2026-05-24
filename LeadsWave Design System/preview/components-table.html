@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+body{margin:0;padding:18px;background:var(--canvas)}
+.wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;width:600px}
+.head{background:oklch(0.11 0 0);display:grid;grid-template-columns:2fr 2fr 110px 60px;border-bottom:1px solid var(--border)}
+.head div{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--fg-4);padding:8px 12px}
+.row{display:grid;grid-template-columns:2fr 2fr 110px 60px;border-bottom:1px solid var(--border-soft)}
+.row:last-child{border-bottom:0}
+.row > div{padding:9px 12px;font-family:var(--font-mono);font-size:13px;color:var(--fg-2);display:flex;align-items:center}
+.muted{color:var(--fg-3)!important}
+.b{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;padding:2px 7px;border-radius:4px}
+</style></head><body>
+<div class="wrap">
+  <div class="head"><div>Company</div><div>Email</div><div>State</div><div>Msgs</div></div>
+  <div class="row" style="background:oklch(0.115 0 0)"><div>Acme Robotics</div><div class="muted">jenna@acme.io</div><div><span class="b" style="background:var(--hot-bg);color:var(--hot);border:1px solid var(--hot-border)">HOT</span></div><div>4</div></div>
+  <div class="row" style="background:oklch(0.105 0 0)"><div>Northwind</div><div class="muted">sales@northwind</div><div><span class="b" style="background:var(--success-bg);color:var(--success);border:1px solid var(--success-border)">REPLIED</span></div><div>2</div></div>
+  <div class="row" style="background:oklch(0.115 0 0)"><div>Pinion Labs</div><div class="muted">hi@pinion.co</div><div><span class="b" style="background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-border)">CONTACTED</span></div><div>1</div></div>
+  <div class="row" style="background:oklch(0.105 0 0)"><div>Kestrel.io</div><div class="muted">—</div><div><span class="b" style="background:oklch(0.16 0 0);color:var(--fg-4);border:1px solid oklch(0.25 0 0)">DISCOVERED</span></div><div>0</div></div>
+</div>
+</body></html>

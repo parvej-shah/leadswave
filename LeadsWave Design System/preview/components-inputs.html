@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+body{margin:0;padding:18px;background:var(--canvas);display:flex;flex-direction:column;gap:12px}
+.label{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--fg-4);display:block;margin-bottom:6px}
+input,textarea,select{width:380px;background:oklch(0.13 0 0);border:1px solid oklch(0.22 0 0);border-radius:6px;padding:8px 10px;color:var(--fg-2);font-family:var(--font-mono);font-size:13px;outline:none}
+input:focus{border-color:var(--amber)}
+.row{display:flex;gap:18px}
+.col{display:flex;flex-direction:column}
+</style></head><body>
+<div class="row">
+  <div class="col"><label class="label">Campaign Name</label><input value="BD law firms Q2"></div>
+  <div class="col"><label class="label">Lead State</label>
+    <select><option>discovered</option><option>contacted</option></select>
+  </div>
+</div>
+<div class="col"><label class="label">Search Query</label><input placeholder='e.g. "digital marketing agencies"'></div>
+</body></html>

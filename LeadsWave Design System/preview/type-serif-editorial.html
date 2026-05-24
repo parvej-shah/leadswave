@@ -1,0 +1,15 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+body{margin:0;padding:24px;background:var(--canvas);display:flex;flex-direction:column;align-items:center;gap:14px;position:relative;overflow:hidden}
+.grid{position:absolute;inset:0;opacity:0.035;background-image:linear-gradient(oklch(1 0 0) 1px, transparent 1px), linear-gradient(90deg, oklch(1 0 0) 1px, transparent 1px);background-size:40px 40px;pointer-events:none}
+.orb{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:600px;height:600px;border-radius:50%;background:var(--amber);opacity:0.06;filter:blur(120px);pointer-events:none}
+.welcome{font-family:var(--font-serif);font-weight:600;font-size:30px;letter-spacing:-0.02em;color:var(--fg-1);position:relative;margin-top:18px}
+.sub{font-family:var(--font-mono);font-size:11px;color:var(--fg-4);position:relative}
+.note{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.2em;color:var(--amber);position:relative;display:flex;align-items:center;gap:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--amber)}
+</style></head><body>
+<div class="grid"></div><div class="orb"></div>
+<div class="note"><span class="dot"></span>EDITORIAL · GEORGIA · ONE MOMENT ONLY</div>
+<div class="welcome">Welcome back.</div>
+<div class="sub">Reserved for the auth/welcome screen. Never used inside the working app.</div>
+</body></html>

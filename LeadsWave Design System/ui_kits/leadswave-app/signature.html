@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>LeadsWave — HOT lead → reply → send</title>
+  <meta name="viewport" content="width=1440, initial-scale=1" />
+  <link rel="stylesheet" href="../../colors_and_type.css">
+  <style>
+    html, body, #root { height: 100%; margin: 0; }
+    body { background: var(--canvas); color: var(--fg-2); }
+    *, *::before, *::after { box-sizing: border-box; }
+    .frame-wrap {
+      padding: 32px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+      max-width: 1440px; margin: 0 auto;
+    }
+    .frame {
+      background: var(--canvas);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      overflow: hidden; position: relative;
+      height: 460px;
+    }
+    .frame-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px; border-bottom: 1px solid var(--border);
+      background: var(--sidebar);
+    }
+    .frame-num {
+      font-family: var(--font-mono); font-size: 10px;
+      text-transform: uppercase; letter-spacing: 0.10em;
+      color: var(--amber); font-weight: 600;
+    }
+    .frame-title {
+      font-family: var(--font-mono); font-size: 12px;
+      color: var(--fg-2);
+    }
+    .frame-time {
+      font-family: var(--font-mono); font-size: 10px;
+      color: var(--fg-4);
+    }
+    .frame-body { padding: 16px; height: calc(100% - 41px); overflow: hidden; }
+    h1.story-title {
+      font-family: var(--font-sans); font-weight: 600; font-size: 28px;
+      letter-spacing: -0.02em; color: var(--fg-1); margin: 0 0 4px;
+      grid-column: 1 / -1;
+    }
+    p.story-sub {
+      font-family: var(--font-mono); font-size: 13px;
+      color: var(--fg-4); margin: 0 0 16px;
+      grid-column: 1 / -1;
+    }
+  </style>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script src="data.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" src="components.jsx"></script>
+  <script type="text/babel">
+    function Frame({ num, title, time, children }) {
+      return (
+        <div className="frame">
+          <div className="frame-header">
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <span className="frame-num">FRAME {num}</span>
+              <span className="frame-title">{title}</span>
+            </div>
+            <span className="frame-time">{time}</span>
+          </div>
+          <div className="frame-body">{children}</div>
+        </div>
+      );
+    }
+
+    // Tiny sidebar specifically scaled for frames
+    function MiniNav({ active, signal }) {
+      const items = [
+        { key: "dashboard", label: "Dashboard", icon: "home" },
+        { key: "campaigns", label: "Campaigns", icon: "target" },
+        { key: "leads", label: "Leads", icon: "users" },
+        { key: "inbox", label: "Inbox", icon: "inbox", signal },
+        { key: "settings", label: "Settings", icon: "settings" },
+      ];
+      return (
+        <div style={{
+          width: 140, flexShrink: 0,
+          background: "var(--sidebar)",
+          borderRight: "1px solid var(--border)",
+          padding: 10, display: "flex", flexDirection: "column", gap: 2, height: "100%",
+        }}>
+          <div style={{ padding: "4px 6px", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--amber)" }} />
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600, color: "var(--fg-1)" }}>LeadsWave</span>
+          </div>
+          {items.map(it => {
+            const isActive = it.key === active;
+            return (
+              <div key={it.key} style={{
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "5px 8px", borderRadius: 4,
+                background: isActive ? "var(--amber-tinted-surface)" : "transparent",
+                color: isActive ? "var(--amber)" : "var(--fg-3)",
+                fontFamily: "var(--font-mono)", fontSize: 11,
+              }}>
+                <Icon name={it.icon} size={11} />
+                <span>{it.label}</span>
+                {it.signal && (
+                  <span style={{ marginLeft: "auto", width: 5, height: 5, borderRadius: "50%", background: "var(--amber)", animation: "pulse 1.4s infinite" }} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // ─── Frame 1: HOT lead arrives — dashboard with toast + nav pulse ───
+    function Frame1() {
+      return (
+        <div style={{ display: "flex", height: "100%" }}>
+          <MiniNav active="dashboard" signal />
+          <div style={{ flex: 1, padding: 14, overflow: "hidden", position: "relative" }}>
+            <p style={{ fontFamily: "var(--font-sans)", fontWeight: 600, fontSize: 16, color: "var(--fg-1)", margin: "0 0 12px", letterSpacing: "-0.02em" }}>Dashboard</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+              {LW.kpis.slice(0,3).map(k => (
+                <div key={k.label} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: 10 }}>
+                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--fg-4)", textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>{k.label}</p>
+                  <p style={{ fontFamily: "var(--font-sans)", fontSize: 18, fontWeight: 600, color: k.color, margin: "4px 0 0", letterSpacing: "-0.02em" }}>{k.value}</p>
+                </div>
+              ))}
+            </div>
+            <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 12px" }}>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-2)", margin: "0 0 8px", fontWeight: 500 }}>Recent Activity</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0" }}>
+                <span>🔥</span>
+                <span style={{ fontFamily: "var(--font-sans)", fontSize: 11, color: "var(--hot)" }}>Hot reply from Acme Robotics</span>
+                <span style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--fg-5)" }}>just now</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0" }}>
+                <span>✉️</span>
+                <span style={{ fontFamily: "var(--font-sans)", fontSize: 11, color: "var(--fg-3)" }}>Emailed Pinion Labs</span>
+                <span style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--fg-5)" }}>3h ago</span>
+              </div>
+            </div>
+
+            {/* Toast / signal overlay */}
+            <div style={{
+              position: "absolute", bottom: 16, right: 16,
+              padding: "8px 12px", borderRadius: 6,
+              background: "var(--hot-tinted-surface)", color: "var(--hot)",
+              border: "1px solid var(--hot-border)",
+              fontFamily: "var(--font-mono)", fontSize: 11,
+              display: "flex", alignItems: "center", gap: 8, animation: "scaleUp 200ms ease",
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--hot)", animation: "pulse 1.4s infinite" }} />
+              <span style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.10em", padding: "1px 5px", borderRadius: 3, background: "oklch(1 0 0 / 6%)" }}>HOT</span>
+              Jenna at Acme Robotics replied
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ─── Frame 2: User opens Inbox, sees Acme thread fresh ───
+    function Frame2() {
+      return (
+        <div style={{ display: "flex", height: "100%" }}>
+          <MiniNav active="inbox" />
+          <div style={{ width: 180, borderRight: "1px solid var(--border)", background: "var(--sidebar)", height: "100%" }}>
+            <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600, color: "var(--fg-1)" }}>Inbox</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--fg-4)" }}>2 hot · 2 warm</span>
+            </div>
+            <div style={{ padding: "8px 12px 4px", display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--hot)" }} />
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, textTransform: "uppercase", letterSpacing: "0.10em", color: "var(--hot)", fontWeight: 600 }}>HOT</span>
+            </div>
+            <div style={{ padding: "8px 10px", background: "oklch(0.14 0 0)", borderLeft: "2px solid var(--amber)", borderBottom: "1px solid var(--border-soft)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-1)", fontWeight: 500 }}>
+                  Acme Robotics
+                  <span style={{ marginLeft: 4, display: "inline-block", width: 5, height: 5, borderRadius: "50%", background: "var(--amber)", animation: "pulse 1.4s infinite", verticalAlign: "middle" }} />
+                </span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--hot)", background: "var(--hot-bg)", border: "1px solid var(--hot-border)", padding: "1px 4px", borderRadius: 3 }}>HOT</span>
+              </div>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--fg-4)", margin: "3px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>What's the pricing look like?</p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 8, color: "var(--fg-5)", margin: "2px 0 0" }}>12m ago</p>
+            </div>
+            <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--border-soft)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-2)" }}>Northwind Logistics</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--hot)", background: "var(--hot-bg)", border: "1px solid var(--hot-border)", padding: "1px 4px", borderRadius: 3 }}>HOT</span>
+              </div>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--fg-4)", margin: "3px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Booked Thursday 3pm.</p>
+            </div>
+          </div>
+          <div style={{ flex: 1, padding: 12, overflow: "hidden", display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 8, borderBottom: "1px solid var(--border-soft)" }}>
+              <div>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--fg-1)", fontWeight: 600, margin: 0 }}>Acme Robotics</p>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--fg-4)", margin: "1px 0 0" }}>jenna@acme.io</p>
+              </div>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--hot)", background: "var(--hot-bg)", border: "1px solid var(--hot-border)", padding: "1px 5px", borderRadius: 3 }}>HOT</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--fg-4)" }}>YOU →</span>
+              <div style={{ padding: "6px 8px", borderRadius: 4, background: "oklch(0.13 0 0)", border: "1px solid oklch(0.20 0 0)", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-3)", lineHeight: 1.5 }}>
+                Saw your post about scaling outbound at Acme. Open to a 15-min walkthrough next week?
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--success)" }}>← THEM</span>
+              <div style={{ padding: "6px 8px", borderRadius: 4, background: "oklch(0.13 0.02 145)", border: "1px solid oklch(0.22 0.04 145)", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-2)", lineHeight: 1.5 }}>
+                Yeah, interested. What's the pricing look like?
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ─── Frame 3: AI draft generated, user editing ───
+    function Frame3() {
+      return (
+        <div style={{ display: "flex", height: "100%" }}>
+          <MiniNav active="inbox" />
+          <div style={{ flex: 1, padding: 12, overflow: "hidden", display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 6, borderBottom: "1px solid var(--border-soft)" }}>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-1)", fontWeight: 600, margin: 0 }}>Acme Robotics</p>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--hot)", background: "var(--hot-bg)", border: "1px solid var(--hot-border)", padding: "1px 5px", borderRadius: 3 }}>HOT</span>
+            </div>
+
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+              <div>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--success)" }}>← THEM · 12m ago</span>
+                <div style={{ marginTop: 3, padding: "6px 8px", borderRadius: 4, background: "oklch(0.13 0.02 145)", border: "1px solid oklch(0.22 0.04 145)", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-2)" }}>
+                  Yeah, interested. What's the pricing look like?
+                </div>
+              </div>
+
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border-soft)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                  <span style={{ width: 3, height: 12, background: "var(--amber)", borderRadius: 1 }} />
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--amber)" }}>AI DRAFT · EDIT BEFORE SENDING</span>
+                </div>
+                <div style={{
+                  padding: "8px 10px", borderRadius: 4,
+                  background: "oklch(0.13 0 0)",
+                  border: "1px solid var(--amber-border)",
+                  borderLeft: "2px solid var(--amber)",
+                  fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-2)", lineHeight: 1.55,
+                  whiteSpace: "pre-wrap",
+                }}>{`Thanks Jenna — happy to walk through pricing. We start at $49/mo per seat, with usage-based scout credits on top. And yes, meetings book directly into Google Calendar; you confirm in one click.
+
+Here's a link to my calendar: cal.com/daniel/leadswave
+
+— Daniel`}<span style={{ display:"inline-block", width: 2, height: 11, background:"var(--amber)", marginLeft: 2, verticalAlign:"middle", animation:"blink 1s steps(2) infinite"}}></span></div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+              <span style={{ padding: "4px 8px", borderRadius: 4, background: "var(--info-bg)", color: "var(--info)", border: "1px solid var(--info-border)", fontFamily: "var(--font-mono)", fontSize: 10 }}>↻ AI Write</span>
+              <span style={{ padding: "4px 8px", borderRadius: 4, background: "var(--success-bg)", color: "var(--success)", border: "1px solid var(--success-border)", fontFamily: "var(--font-mono)", fontSize: 10 }}>Send Reply →</span>
+            </div>
+          </div>
+          <style>{`@keyframes blink { 50% { opacity: 0 } }`}</style>
+        </div>
+      );
+    }
+
+    // ─── Frame 4: Reply sent, toast, thread updated, lead converted ───
+    function Frame4() {
+      return (
+        <div style={{ display: "flex", height: "100%" }}>
+          <MiniNav active="inbox" />
+          <div style={{ flex: 1, padding: 12, overflow: "hidden", display: "flex", flexDirection: "column", gap: 8, position: "relative" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 6, borderBottom: "1px solid var(--border-soft)" }}>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-1)", fontWeight: 600, margin: 0 }}>Acme Robotics</p>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--success)", background: "var(--success-bg)", border: "1px solid var(--success-border)", padding: "1px 5px", borderRadius: 3 }}>CONVERTED</span>
+            </div>
+
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, overflow: "hidden" }}>
+              <div>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--success)" }}>← THEM · 12m ago</span>
+                <div style={{ marginTop: 3, padding: "6px 8px", borderRadius: 4, background: "oklch(0.13 0.02 145)", border: "1px solid oklch(0.22 0.04 145)", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-2)" }}>
+                  Yeah, interested. What's the pricing look like?
+                </div>
+              </div>
+              <div>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--fg-4)" }}>YOU → · just now</span>
+                <div style={{ marginTop: 3, padding: "6px 8px", borderRadius: 4, background: "oklch(0.13 0 0)", border: "1px solid oklch(0.20 0 0)", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-2)", whiteSpace: "pre-wrap", lineHeight: 1.55 }}>
+                  Thanks Jenna — happy to walk through pricing. We start at $49/mo per seat. Here's a link to my calendar: cal.com/daniel/leadswave — Daniel
+                </div>
+              </div>
+            </div>
+
+            {/* Empty composer */}
+            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 8 }}>
+              <div style={{ padding: "8px 10px", borderRadius: 4, background: "oklch(0.13 0 0)", border: "1px solid oklch(0.20 0 0)", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-5)" }}>Write your reply…</div>
+            </div>
+
+            {/* Success toast */}
+            <div style={{
+              position: "absolute", bottom: 60, right: 12,
+              padding: "6px 10px", borderRadius: 4,
+              background: "var(--success-tinted-surface)", color: "var(--success)",
+              border: "1px solid var(--success-border)",
+              fontFamily: "var(--font-mono)", fontSize: 10,
+              display: "flex", alignItems: "center", gap: 8, animation: "scaleUp 200ms ease",
+            }}>
+              <span style={{ fontSize: 8, textTransform: "uppercase", letterSpacing: "0.10em", padding: "1px 4px", borderRadius: 3, background: "oklch(1 0 0 / 6%)" }}>SENT</span>
+              Reply sent to Acme Robotics
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function SignatureStory() {
+      return (
+        <div className="frame-wrap">
+          <h1 className="story-title">Signature interaction · HOT lead → triage → AI draft → sent</h1>
+          <p className="story-sub">A new reply lands. You jump to Inbox, scan the AI draft, tweak it, and send. ~12 seconds, four keystrokes.</p>
+          <Frame num={1} title="A new HOT reply arrives" time="00:00 · just now"><Frame1 /></Frame>
+          <Frame num={2} title="Open the Inbox · scan the thread" time="00:03 · ⌘K → 'inbox'"><Frame2 /></Frame>
+          <Frame num={3} title="AI generates a draft · you edit it" time="00:06 · R + type"><Frame3 /></Frame>
+          <Frame num={4} title="Sent · lead state → converted" time="00:12 · ⏎ Send"><Frame4 /></Frame>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<SignatureStory />);
+  </script>
+  <style>
+    @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.35 } }
+    @keyframes scaleUp { from { transform: scale(0.96); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+    @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+  </style>
+</body>
+</html>

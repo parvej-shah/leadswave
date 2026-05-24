@@ -1,0 +1,205 @@
+/* ============================================================
+   LeadsWave Design System — Tokens
+   Dark-only, terminal/trading-desk. OKLCH throughout.
+   Variable names map onto the existing app/globals.css names
+   where they exist so they can be wired up directly.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  /* ───────── Surfaces (existing names: --background, --card, --sidebar) ───────── */
+  --canvas:           oklch(0.09 0 0);   /* app background */
+  --sidebar:          oklch(0.10 0 0);   /* sidebar, modals base */
+  --surface:          oklch(0.14 0 0);   /* cards, KPI tiles, table */
+  --surface-2:        oklch(0.16 0 0);   /* hover, secondary tinted */
+  --surface-3:        oklch(0.18 0 0);   /* highest dark surface */
+
+  --background:       var(--canvas);
+  --card:             var(--surface);
+  --popover:          var(--surface);
+  --muted:            var(--surface-2);
+
+  /* ───────── Text (5-step neutral) ───────── */
+  --fg-1:             oklch(0.96 0 0);   /* display, h1 */
+  --fg-2:             oklch(0.88 0 0);   /* primary body */
+  --fg-3:             oklch(0.65 0 0);   /* secondary */
+  --fg-4:             oklch(0.45 0 0);   /* tertiary, mono labels */
+  --fg-5:             oklch(0.32 0 0);   /* placeholder, disabled */
+
+  --foreground:           var(--fg-2);
+  --card-foreground:      var(--fg-2);
+  --popover-foreground:   var(--fg-2);
+  --muted-foreground:     var(--fg-4);
+
+  /* ───────── Brand & semantic accents ───────── */
+  --amber:            oklch(0.78 0.18 65);   /* brand, primary, active nav */
+  --amber-hover:      oklch(0.84 0.16 65);
+  --amber-bg:         oklch(0.78 0.18 65 / 15%);
+  --amber-border:     oklch(0.78 0.18 65 / 30%);
+  --amber-tinted-surface: oklch(0.18 0.04 65);  /* solid tinted block */
+
+  --hot:              oklch(0.70 0.20 25);   /* HOT, destructive */
+  --hot-bg:           oklch(0.70 0.20 25 / 15%);
+  --hot-border:       oklch(0.70 0.20 25 / 30%);
+  --hot-tinted-surface: oklch(0.18 0.04 25);
+
+  --success:          oklch(0.72 0.18 145);  /* replied, converted */
+  --success-bg:       oklch(0.72 0.18 145 / 15%);
+  --success-border:   oklch(0.72 0.18 145 / 30%);
+  --success-tinted-surface: oklch(0.16 0.04 145);
+
+  --info:             oklch(0.65 0.18 260);  /* meetings, AI draft tag */
+  --info-bg:          oklch(0.65 0.18 260 / 15%);
+  --info-border:      oklch(0.65 0.18 260 / 30%);
+  --info-tinted-surface: oklch(0.16 0.03 260);
+
+  --warn:             oklch(0.75 0.16 85);   /* warm, mid-state */
+
+  /* Legacy semantic mappings */
+  --primary:              var(--amber);
+  --primary-foreground:   var(--canvas);
+  --destructive:          var(--hot);
+  --accent:               var(--amber);
+  --accent-foreground:    var(--canvas);
+
+  /* ───────── Borders ───────── */
+  --border:           oklch(1 0 0 / 7%);   /* card + section borders */
+  --border-soft:      oklch(1 0 0 / 4%);   /* table row dividers */
+  --border-strong:    oklch(1 0 0 / 12%);  /* focused inputs */
+  --input:            oklch(1 0 0 / 10%);
+  --ring:             var(--amber);
+
+  /* ───────── Radius ───────── */
+  --radius-xs:        2px;
+  --radius-sm:        4px;
+  --radius-md:        6px;
+  --radius-lg:        8px;
+  --radius-xl:        12px;   /* cards */
+  --radius-2xl:       16px;
+  --radius-pill:      9999px;
+  --radius:           var(--radius-md);
+
+  /* ───────── Spacing (4-pt) ───────── */
+  --space-1:          4px;
+  --space-2:          8px;
+  --space-3:          12px;
+  --space-4:          16px;
+  --space-5:          20px;
+  --space-6:          24px;
+  --space-8:          32px;
+  --space-10:         40px;
+  --space-12:         48px;
+
+  /* ───────── Type families ───────── */
+  --font-mono:    'DM Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --font-sans:    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-serif:   Georgia, 'Times New Roman', serif;   /* reserved for auth welcome */
+
+  /* ───────── Type scale ───────── */
+  --text-2xs:         10px;
+  --text-xs:          11px;
+  --text-sm:          13px;
+  --text-base:        14px;
+  --text-md:          15px;
+  --text-lg:          18px;
+  --text-xl:          22px;
+  --text-2xl:         24px;
+  --text-3xl:         30px;
+
+  /* ───────── Tracking ───────── */
+  --tracking-display:     -0.02em;
+  --tracking-normal:       0em;
+  --tracking-mono:         0.02em;
+  --tracking-label:        0.08em;   /* small uppercase mono labels */
+  --tracking-eyebrow:      0.20em;   /* tiny eyebrow ("LEADSWAVE") */
+
+  /* ───────── Sidebar */
+  --sidebar-width:        224px;
+  --sidebar-rail-width:   56px;
+}
+
+/* ============================================================
+   Semantic typographic classes — apply with class names directly
+   ============================================================ */
+
+.ds-display {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--text-3xl);
+  letter-spacing: var(--tracking-display);
+  color: var(--fg-1);
+}
+.ds-h1 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--text-2xl);
+  letter-spacing: var(--tracking-display);
+  color: var(--fg-1);
+}
+.ds-h2 {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: var(--text-md);
+  color: var(--fg-2);
+}
+.ds-h3 {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: var(--text-base);
+  color: var(--fg-2);
+}
+.ds-body {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--fg-3);
+  line-height: 1.55;
+}
+.ds-mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--fg-3);
+}
+.ds-mono-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--fg-4);
+}
+.ds-mono-eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--amber);
+}
+.ds-mono-numeric {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  color: var(--fg-2);
+}
+.ds-kpi-value {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--text-2xl);
+  letter-spacing: var(--tracking-display);
+}
+.ds-serif-welcome {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: var(--text-3xl);
+  letter-spacing: var(--tracking-display);
+  color: var(--fg-1);
+}
+
+/* Element-level baseline */
+body {
+  background: var(--canvas);
+  color: var(--fg-2);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}

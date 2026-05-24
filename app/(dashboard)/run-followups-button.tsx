@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Button, Toast } from "@/components/ui";
 
 type Result = { processed: number; failed: number; total: number } | null;
 
@@ -24,43 +25,30 @@ export function RunFollowupsButton() {
     }
   }
 
-  const mono = { fontFamily: "'DM Mono', monospace" } as const;
-
   return (
     <div className="flex items-center gap-3">
-      <button
-        onClick={run}
+      <Button
+        variant="info"
+        size="md"
+        iconStart="refresh"
         disabled={state === "running"}
-        style={{
-          ...mono,
-          background: state === "running" ? "oklch(0.18 0 0)" : "oklch(0.20 0.04 260)",
-          color: state === "running" ? "oklch(0.45 0 0)" : "oklch(0.72 0.18 260)",
-          border: `1px solid ${state === "running" ? "oklch(0.26 0 0)" : "oklch(0.32 0.10 260)"}`,
-          borderRadius: "0.375rem",
-          fontSize: "0.75rem",
-          padding: "0.375rem 0.875rem",
-          cursor: state === "running" ? "not-allowed" : "pointer",
-          transition: "all 0.15s",
-          letterSpacing: "0.03em",
-        }}
+        onClick={run}
       >
         {state === "running" ? "processing…" : "Run follow-ups"}
-      </button>
+      </Button>
 
       {state === "done" && result && (
-        <span style={{ ...mono, fontSize: "0.72rem", color: "oklch(0.65 0.15 145)" }}>
-          ✓ {result.processed} sent
-          {result.failed > 0 && (
-            <span style={{ color: "oklch(0.62 0.18 25)" }}> · {result.failed} failed</span>
-          )}
+        <Toast kind={result.failed > 0 ? "amber" : "success"} pill="DONE">
+          {result.processed} sent
+          {result.failed > 0 && ` · ${result.failed} failed`}
           {result.total === 0 && " · no jobs due"}
-        </span>
+        </Toast>
       )}
 
       {state === "error" && (
-        <span style={{ ...mono, fontSize: "0.72rem", color: "oklch(0.62 0.18 25)" }}>
-          ✗ error — check console
-        </span>
+        <Toast kind="hot" pill="ERROR">
+          check console
+        </Toast>
       )}
     </div>
   );

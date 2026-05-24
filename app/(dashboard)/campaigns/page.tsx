@@ -1,199 +1,107 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { Button, EmptyState } from "@/components/ui";
+import { CampaignRow, type CampaignRowData } from "./campaign-row";
+import { StatusFilter, type StatusFilter as StatusFilterValue } from "./status-filter";
 
-type Campaign = {
-  id: string;
-  name: string;
-  query: string;
-  location: string;
-  status: string;
-  createdAt: string;
-  _count: { leads: number };
-};
+const VALID_STATUSES = new Set<StatusFilterValue>(["all", "active", "paused", "completed"]);
 
-const statusColors: Record<string, string> = {
-  active: "text-emerald-400 bg-emerald-950/50 border-emerald-900",
-  paused: "text-zinc-400 bg-zinc-800/50 border-zinc-700",
-  completed: "text-zinc-500 bg-zinc-900/50 border-zinc-800",
-};
+export default async function CampaignsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
 
-function StatusBadge({ status }: { status: string }) {
-  const cls = statusColors[status] ?? "text-zinc-500 bg-zinc-900/50 border-zinc-800";
-  return (
-    <span
-      className={`text-xs font-medium px-2 py-0.5 rounded-full border ${cls}`}
-      style={{ fontFamily: "'DM Mono', monospace" }}
-    >
-      {status}
-    </span>
+  const params = await searchParams;
+  const filter: StatusFilterValue = VALID_STATUSES.has(params.status as StatusFilterValue)
+    ? (params.status as StatusFilterValue)
+    : "all";
+
+  const campaigns = await db.campaign.findMany({
+    where: {
+      deletedAt: null,
+      ...(filter !== "all" ? { status: filter } : {}),
+    },
+    include: { leads: { include: { messages: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const rows: CampaignRowData[] = campaigns.map((c) => {
+    let sent = 0,
+      replies = 0,
+      hot = 0,
+      meetings = 0;
+    c.leads.forEach((l) => {
+      sent += l.messages.filter((m) => m.direction === "outbound").length;
+      replies += l.messages.filter((m) => m.direction === "inbound").length;
+      if (l.state === "replied") hot++;
+      if (l.state === "meeting_booked") meetings++;
+    });
+    return {
+      id: c.id,
+      name: c.name,
+      query: c.query,
+      location: c.location,
+      status: c.status,
+      leads: c.leads.length,
+      sent,
+      replies,
+      hot,
+      meetings,
+      createdAt: c.createdAt.toISOString(),
+    };
+  });
+
+  // Totals computed across the filtered view
+  const totals = rows.reduce(
+    (acc, r) => {
+      acc.leads += r.leads;
+      acc.sent += r.sent;
+      acc.replies += r.replies;
+      return acc;
+    },
+    { leads: 0, sent: 0, replies: 0 }
   );
-}
 
-export default function CampaignsPage() {
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [runningId, setRunningId] = useState<string | null>(null);
-  const [rowMessage, setRowMessage] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    fetch("/api/campaigns")
-      .then((r) => r.json())
-      .then((data) => {
-        setCampaigns(Array.isArray(data) ? data : []);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError("Failed to load campaigns.");
-        setLoading(false);
-      });
-  }, []);
-
-  async function rerunScout(campaignId: string) {
-    setRowMessage((m) => ({ ...m, [campaignId]: "" }));
-    setRunningId(campaignId);
-    try {
-      const res = await fetch("/api/agents/scout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ campaignId }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setRowMessage((m) => ({ ...m, [campaignId]: data.error ?? "Scout failed" }));
-        return;
-      }
-      setRowMessage((m) => ({
-        ...m,
-        [campaignId]: `Scout complete. ${data.savedCount ?? 0} leads saved.`,
-      }));
-      const listRes = await fetch("/api/campaigns");
-      const listData = await listRes.json();
-      setCampaigns(Array.isArray(listData) ? listData : []);
-    } catch {
-      setRowMessage((m) => ({ ...m, [campaignId]: "Scout failed" }));
-    } finally {
-      setRunningId(null);
-    }
-  }
+  const activeCount = rows.filter((c) => c.status === "active").length;
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-8">
+    <div className="flex flex-col gap-6">
+      {/* Header */}
+      <div className="flex items-end justify-between gap-4">
         <div>
-          <h1
-            className="text-xl font-semibold text-zinc-100 mb-1"
-            style={{ fontFamily: "'DM Mono', monospace" }}
-          >
-            Campaigns
-          </h1>
-          <p className="text-sm text-zinc-500">
-            Each campaign scouts for matching companies.
+          <h1 className="ds-h1 m-0 mb-1">Campaigns</h1>
+          <p className="font-mono text-[12px] text-fg-4 m-0">
+            {activeCount} active · scouting{" "}
+            <span className="text-fg-2">{totals.leads}</span> leads ·{" "}
+            <span className="text-success">{totals.replies}</span> replies
           </p>
         </div>
-        <Link
-          href="/campaigns/new"
-          className="px-3 py-2 rounded text-sm font-medium text-zinc-900 transition-opacity hover:opacity-90"
-          style={{ backgroundColor: "oklch(0.78 0.18 65)", fontFamily: "'DM Mono', monospace" }}
-        >
-          + New Campaign
-        </Link>
-      </div>
-
-      {error && (
-        <p className="text-xs text-red-400 border border-red-900/50 bg-red-950/30 rounded px-3 py-2 mb-4">
-          {error}
-        </p>
-      )}
-
-      {loading ? (
-        <div className="flex flex-col gap-3">
-          {[...Array(3)].map((_, i) => (
-            <div
-              key={i}
-              className="h-16 rounded border border-zinc-800 bg-zinc-900/50 animate-pulse"
-            />
-          ))}
-        </div>
-      ) : campaigns.length === 0 ? (
-        <div className="border border-dashed border-zinc-800 rounded p-12 text-center">
-          <p className="text-sm text-zinc-500 mb-4">No campaigns yet.</p>
-          <Link
-            href="/campaigns/new"
-            className="text-sm underline underline-offset-4"
-            style={{ color: "oklch(0.78 0.18 65)" }}
-          >
-            Launch your first campaign →
+        <div className="flex items-center gap-2">
+          <StatusFilter current={filter} />
+          <Link href="/campaigns/new">
+            <Button iconStart="plus">New Campaign</Button>
           </Link>
         </div>
+      </div>
+
+      {/* Rows */}
+      {rows.length === 0 ? (
+        <EmptyState
+          action={{ label: "Launch your first campaign →", href: "/campaigns/new" }}
+        >
+          {filter === "all"
+            ? "No campaigns yet."
+            : `No ${filter} campaigns.`}
+        </EmptyState>
       ) : (
-        <div className="flex flex-col gap-2">
-          {campaigns.map((c) => (
-            <div key={c.id} className="rounded border border-zinc-800 bg-zinc-900/40 hover:border-zinc-700 transition-colors px-4 py-3">
-              <div className="flex items-center gap-4">
-                <div className="flex-1 min-w-0">
-                  <p
-                    className="text-sm font-medium text-zinc-100 truncate"
-                    style={{ fontFamily: "'DM Mono', monospace" }}
-                  >
-                    {c.name}
-                  </p>
-                  <p className="text-xs text-zinc-500 truncate mt-0.5">
-                    {c.query} · {c.location}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3 shrink-0">
-                  <StatusBadge status={c.status} />
-
-                  <span
-                    className="text-xs text-zinc-400"
-                    style={{ fontFamily: "'DM Mono', monospace" }}
-                  >
-                    {c._count.leads} leads
-                  </span>
-
-                  <span className="text-xs text-zinc-600">
-                    {new Date(c.createdAt).toLocaleDateString()}
-                  </span>
-
-                  <button
-                    onClick={() => rerunScout(c.id)}
-                    disabled={runningId === c.id}
-                    className="px-2 py-1 rounded text-xs border border-zinc-700 text-zinc-200 hover:border-zinc-500 disabled:opacity-60 transition-colors"
-                    style={{ fontFamily: "'DM Mono', monospace" }}
-                  >
-                    {runningId === c.id ? "Scouting..." : "Re-run Scout"}
-                  </button>
-
-                  <Link
-                    href={`/campaigns/${c.id}/edit`}
-                    className="px-2 py-1 rounded text-xs border border-zinc-700 text-zinc-300 hover:border-zinc-500 transition-colors"
-                    style={{ fontFamily: "'DM Mono', monospace" }}
-                  >
-                    Edit
-                  </Link>
-
-                  <Link
-                    href={`/campaigns/${c.id}/import`}
-                    className="px-2 py-1 rounded text-xs transition-opacity hover:opacity-90"
-                    style={{
-                      background: "oklch(0.18 0.03 65)",
-                      color: "oklch(0.78 0.18 65)",
-                      border: "1px solid oklch(0.28 0.06 65)",
-                      fontFamily: "'DM Mono', monospace",
-                    }}
-                  >
-                    Import CSV
-                  </Link>
-                </div>
-              </div>
-              {rowMessage[c.id] ? (
-                <p className="text-xs text-zinc-500 mt-2">{rowMessage[c.id]}</p>
-              ) : null}
-            </div>
+        <div className="flex flex-col gap-2.5">
+          {rows.map((c) => (
+            <CampaignRow key={c.id} c={c} />
           ))}
         </div>
       )}

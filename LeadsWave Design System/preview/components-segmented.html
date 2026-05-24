@@ -1,0 +1,35 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+body{margin:0;padding:18px;background:var(--canvas);display:flex;flex-direction:column;gap:14px}
+.row{display:flex;gap:10px;align-items:center}
+.seg{display:inline-flex;padding:2px;border-radius:6px;background:oklch(0.13 0 0);border:1px solid oklch(0.20 0 0);gap:1px}
+.seg button{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.06em;padding:5px 10px;border:0;border-radius:4px;cursor:pointer}
+.act{background:oklch(0.18 0 0);color:var(--fg-1)}
+.inact{background:transparent;color:var(--fg-4)}
+.lbl{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--fg-4);width:120px}
+</style></head><body>
+<div class="row">
+  <span class="lbl">PERIOD</span>
+  <div class="seg">
+    <button class="inact">24H</button>
+    <button class="act">7D</button>
+    <button class="inact">30D</button>
+    <button class="inact">YTD</button>
+  </div>
+</div>
+<div class="row">
+  <span class="lbl">FILTER</span>
+  <div class="seg">
+    <button class="act">ALL · 4</button>
+    <button class="inact">HOT · 2</button>
+    <button class="inact">WARM · 2</button>
+  </div>
+</div>
+<div class="row">
+  <span class="lbl">DENSITY</span>
+  <div class="seg">
+    <button class="act">COZY</button>
+    <button class="inact">DENSE</button>
+  </div>
+</div>
+</body></html>

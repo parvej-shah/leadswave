@@ -1,0 +1,21 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+body{margin:0;padding:18px;background:var(--canvas);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button{font-family:var(--font-mono);font-size:13px;border-radius:6px;padding:8px 14px;border:1px solid transparent;cursor:pointer;font-weight:500;letter-spacing:0.01em}
+.primary{background:var(--amber);color:var(--canvas)}
+.secondary{background:transparent;color:var(--fg-2);border:1px solid oklch(0.22 0 0)}
+.ghost{background:transparent;color:var(--fg-3)}
+.destructive{background:var(--hot-bg);color:var(--hot);border:1px solid var(--hot-border)}
+.tinted{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-border)}
+.small{padding:5px 10px;font-size:11px}
+.disabled{opacity:.4;cursor:not-allowed}
+</style></head><body>
+<button class="primary">+ New Campaign</button>
+<button class="secondary">Edit</button>
+<button class="ghost">Cancel</button>
+<button class="destructive">Delete Lead</button>
+<button class="tinted">Import CSV</button>
+<button class="primary small">Send</button>
+<button class="secondary small">Re-run Scout</button>
+<button class="primary disabled">Sending…</button>
+</body></html>

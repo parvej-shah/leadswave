@@ -1,0 +1,49 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+body{margin:0;padding:18px;background:var(--canvas);display:flex;gap:14px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;width:155px;flex-shrink:0;position:relative;overflow:hidden}
+.lbl{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.10em;color:var(--fg-4);margin:0 0 10px}
+.row{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.val{font-family:var(--font-sans);font-size:26px;font-weight:600;letter-spacing:-0.025em;line-height:1;font-variant-numeric:tabular-nums}
+.delta{display:inline-flex;align-items:center;gap:3px;font-family:var(--font-mono);font-size:10px;padding:1px 5px;border-radius:3px;background:oklch(1 0 0 / 4%);letter-spacing:0.02em}
+.delta svg{fill:currentColor}
+.spark{margin-top:12px;margin-left:-2px;margin-right:-2px}
+</style></head><body>
+<div class="card">
+  <p class="lbl">Total Leads</p>
+  <div class="row"><span class="val" style="color:var(--fg-1)">1,284</span><span class="delta" style="color:var(--success)"><svg width="9" height="9" viewBox="0 0 12 12"><path d="M6 2 L10 8 L2 8 Z"/></svg>12.4%</span></div>
+  <div class="spark">
+    <svg width="160" height="28" viewBox="0 0 160 28">
+      <defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="oklch(0.78 0.18 65)" stop-opacity="0.25"/><stop offset="100%" stop-color="oklch(0.78 0.18 65)" stop-opacity="0"/></linearGradient></defs>
+      <path d="M 0 18 Q 27 16, 40 14 T 80 12 Q 107 9, 120 8 T 160 4 L 160 28 L 0 28 Z" fill="url(#g1)"/>
+      <path d="M 0 18 Q 27 16, 40 14 T 80 12 Q 107 9, 120 8 T 160 4" stroke="oklch(0.78 0.18 65)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+      <circle cx="160" cy="4" r="3" fill="oklch(0.78 0.18 65)" opacity="0.25"/>
+      <circle cx="160" cy="4" r="1.75" fill="oklch(0.78 0.18 65)"/>
+    </svg>
+  </div>
+</div>
+<div class="card">
+  <p class="lbl">Reply Rate</p>
+  <div class="row"><span class="val" style="color:var(--success)">12.4%</span><span class="delta" style="color:var(--success)"><svg width="9" height="9" viewBox="0 0 12 12"><path d="M6 2 L10 8 L2 8 Z"/></svg>2.6 pt</span></div>
+  <div class="spark">
+    <svg width="160" height="28" viewBox="0 0 160 28">
+      <defs><linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="oklch(0.72 0.18 145)" stop-opacity="0.25"/><stop offset="100%" stop-color="oklch(0.72 0.18 145)" stop-opacity="0"/></linearGradient></defs>
+      <path d="M 0 18 L 27 20 L 53 12 L 80 14 L 107 8 L 133 8 L 160 4 L 160 28 L 0 28 Z" fill="url(#g2)"/>
+      <path d="M 0 18 L 27 20 L 53 12 L 80 14 L 107 8 L 133 8 L 160 4" stroke="oklch(0.72 0.18 145)" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="160" cy="4" r="1.75" fill="oklch(0.72 0.18 145)"/>
+    </svg>
+  </div>
+</div>
+<div class="card">
+  <p class="lbl">Hot Leads</p>
+  <div class="row"><span class="val" style="color:var(--hot)">17</span><span class="delta" style="color:var(--hot)"><svg width="9" height="9" viewBox="0 0 12 12"><path d="M6 2 L10 8 L2 8 Z"/></svg>4 today</span></div>
+  <div class="spark">
+    <svg width="160" height="28" viewBox="0 0 160 28">
+      <defs><linearGradient id="g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="oklch(0.70 0.20 25)" stop-opacity="0.25"/><stop offset="100%" stop-color="oklch(0.70 0.20 25)" stop-opacity="0"/></linearGradient></defs>
+      <path d="M 0 22 L 27 20 L 53 22 L 80 14 L 107 16 L 133 6 L 160 4 L 160 28 L 0 28 Z" fill="url(#g3)"/>
+      <path d="M 0 22 L 27 20 L 53 22 L 80 14 L 107 16 L 133 6 L 160 4" stroke="oklch(0.70 0.20 25)" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="160" cy="4" r="1.75" fill="oklch(0.70 0.20 25)"/>
+    </svg>
+  </div>
+</div>
+</body></html>

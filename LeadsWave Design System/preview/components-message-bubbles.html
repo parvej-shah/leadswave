@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+body{margin:0;padding:18px;background:var(--canvas);display:flex;gap:14px}
+.bubble{max-width:280px;padding:10px 12px;border-radius:6px;font-family:var(--font-mono);font-size:12px;line-height:1.55;color:var(--fg-2);position:relative}
+.inbound{background:oklch(0.13 0.02 145);border:1px solid oklch(0.22 0.04 145)}
+.outbound{background:oklch(0.13 0 0);border:1px solid oklch(0.20 0 0)}
+.ai{background:oklch(0.13 0 0);border:1px solid oklch(0.20 0 0);border-left:2px solid var(--amber);padding-left:12px}
+.tag{display:block;font-size:10px;letter-spacing:0.06em;margin-bottom:4px;text-transform:uppercase}
+.col{display:flex;flex-direction:column;gap:4px}
+</style></head><body>
+<div class="col">
+  <div class="bubble inbound"><span class="tag" style="color:var(--success)">← THEM</span>Yeah, interested. What's the pricing look like?</div>
+</div>
+<div class="col">
+  <div class="bubble outbound"><span class="tag" style="color:var(--fg-4)">YOU →</span>Hi Sarah — saw your post about scaling outbound…</div>
+</div>
+<div class="col">
+  <div class="bubble ai"><span class="tag" style="color:var(--amber)">AI DRAFT · EDIT BEFORE SENDING</span>Thanks Sarah. Pricing starts at $49/mo per seat with…</div>
+</div>
+</body></html>

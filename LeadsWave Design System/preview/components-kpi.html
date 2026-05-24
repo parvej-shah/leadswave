@@ -1,0 +1,43 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+body{margin:0;padding:18px;background:var(--canvas);display:flex;gap:12px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;width:140px;flex-shrink:0}
+.label{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--fg-4);margin-bottom:10px}
+.val{font-family:var(--font-sans);font-size:24px;font-weight:600;letter-spacing:-0.02em;line-height:1}
+.spark{margin-top:10px;height:18px;display:flex;align-items:flex-end;gap:2px}
+.spark span{flex:1;background:currentColor;opacity:.5;border-radius:1px}
+.delta{font-family:var(--font-mono);font-size:10px;margin-top:6px;color:var(--fg-4);letter-spacing:0.04em}
+</style></head><body>
+<div class="card">
+  <div class="label">Total Leads</div>
+  <div class="val" style="color:var(--fg-1)">1,284</div>
+  <div class="spark" style="color:var(--amber)">
+    <span style="height:30%"></span><span style="height:50%"></span><span style="height:40%"></span><span style="height:65%"></span><span style="height:55%"></span><span style="height:80%"></span><span style="height:100%"></span>
+  </div>
+  <div class="delta" style="color:var(--success)">+ 12.4% · 7D</div>
+</div>
+<div class="card">
+  <div class="label">Reply Rate</div>
+  <div class="val" style="color:var(--success)">12.4%</div>
+  <div class="spark" style="color:var(--success)">
+    <span style="height:60%"></span><span style="height:50%"></span><span style="height:70%"></span><span style="height:55%"></span><span style="height:80%"></span><span style="height:75%"></span><span style="height:90%"></span>
+  </div>
+  <div class="delta">REPLIES / SENT</div>
+</div>
+<div class="card">
+  <div class="label">Hot Leads</div>
+  <div class="val" style="color:var(--hot)">17</div>
+  <div class="spark" style="color:var(--hot)">
+    <span style="height:20%"></span><span style="height:30%"></span><span style="height:25%"></span><span style="height:50%"></span><span style="height:40%"></span><span style="height:65%"></span><span style="height:80%"></span>
+  </div>
+  <div class="delta" style="color:var(--hot)">+ 4 TODAY</div>
+</div>
+<div class="card">
+  <div class="label">Meetings</div>
+  <div class="val" style="color:var(--info)">6</div>
+  <div class="spark" style="color:var(--info)">
+    <span style="height:0%"></span><span style="height:30%"></span><span style="height:0%"></span><span style="height:50%"></span><span style="height:30%"></span><span style="height:80%"></span><span style="height:50%"></span>
+  </div>
+  <div class="delta">THIS WEEK</div>
+</div>
+</body></html>

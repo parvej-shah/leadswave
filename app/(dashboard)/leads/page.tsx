@@ -1,7 +1,23 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { Search, Filter, X } from "lucide-react";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import Link from "next/link";
+import {
+  Avatar,
+  Badge,
+  Button,
+  Dialog,
+  EmptyState,
+  FilterChip,
+  Icon,
+  Input,
+  Label,
+  Segmented,
+  Select,
+  StateBadge,
+  Toast,
+  type LeadState,
+} from "@/components/ui";
 
 type Lead = {
   id: string;
@@ -10,84 +26,78 @@ type Lead = {
   website: string | null;
   state: string;
   createdAt: string;
+  updatedAt?: string;
   campaign: { name: string };
   _count: { messages: number };
 };
 
+const STATE_KEYS: LeadState[] = [
+  "discovered",
+  "contacted",
+  "replied",
+  "converted",
+  "unsubscribed",
+  "bounced",
+];
 
-const STATE_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  discovered:  { label: "discovered",  color: "oklch(0.60 0 0)",        bg: "oklch(0.15 0 0)",      border: "oklch(0.25 0 0)"      },
-  contacted:   { label: "contacted",   color: "oklch(0.78 0.18 65)",    bg: "oklch(0.18 0.04 65)",  border: "oklch(0.30 0.08 65)"  },
-  replied:     { label: "replied",     color: "oklch(0.72 0.18 145)",   bg: "oklch(0.16 0.04 145)", border: "oklch(0.28 0.08 145)" },
-  converted:   { label: "converted",  color: "oklch(0.72 0.18 145)",   bg: "oklch(0.16 0.04 145)", border: "oklch(0.28 0.08 145)" },
-  unsubscribed:{ label: "unsub",       color: "oklch(0.55 0.12 25)",    bg: "oklch(0.16 0.03 25)",  border: "oklch(0.28 0.06 25)"  },
-  bounced:     { label: "bounced",     color: "oklch(0.60 0.18 25)",    bg: "oklch(0.16 0.04 25)",  border: "oklch(0.28 0.08 25)"  },
-};
+const SENT_STATES = new Set([
+  "contacted",
+  "replied",
+  "converted",
+  "meeting_booked",
+  "unsubscribed",
+  "bounced",
+]);
 
-function StateBadge({ state }: { state: string }) {
-  const s = STATE_STYLES[state] ?? STATE_STYLES["discovered"];
-  return (
-    <span
-      style={{
-        color: s.color,
-        background: s.bg,
-        border: `1px solid ${s.border}`,
-        fontFamily: "'DM Mono', monospace",
-        fontSize: "0.6875rem",
-        letterSpacing: "0.06em",
-        padding: "2px 7px",
-        borderRadius: "4px",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {s.label}
-    </span>
-  );
+type SortKey = "company" | "campaign" | "lastTouched" | "state" | "msgs";
+type SortDir = "asc" | "desc";
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  const mo = Math.floor(d / 30);
+  return `${mo}mo ago`;
 }
 
-function TruncatedUrl({ href }: { href: string }) {
+function truncateUrl(href: string): string {
   let display = href.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
   if (display.length > 28) display = display.slice(0, 26) + "…";
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      style={{ color: "oklch(0.55 0 0)", fontSize: "0.75rem", fontFamily: "'DM Mono', monospace" }}
-      className="hover:underline"
-    >
-      {display}
-    </a>
-  );
+  return display;
 }
 
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [campaignFilter, setCampaignFilter] = useState("all");
-  const [stateFilter, setStateFilter] = useState("all");
+  const [stateFilter, setStateFilter] = useState<"all" | LeadState>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [removing, setRemoving] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
   const [sendError, setSendError] = useState<{ id: string; msg: string } | null>(null);
+  const [selection, setSelection] = useState<Set<string>>(new Set());
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({
+    key: "lastTouched",
+    dir: "desc",
+  });
+  const [density, setDensity] = useState<"comfortable" | "compact">("comfortable");
 
-  // Edit lead state
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
-  const [editForm, setEditForm] = useState<{
-    companyName: string;
-    email: string;
-    website: string;
-    state: string;
-  }>({ companyName: "", email: "", website: "", state: "discovered" });
+  const [editForm, setEditForm] = useState({
+    companyName: "",
+    email: "",
+    website: "",
+    state: "discovered" as string,
+  });
   const [updating, setUpdating] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
 
-  // Delete lead state
   const [deletingLead, setDeletingLead] = useState<Lead | null>(null);
-
-  const campaigns = Array.from(
-    new Map(leads.map((l) => [l.campaign.name, l.campaign.name])).entries()
-  ).map(([k]) => k);
 
   const fetchLeads = useCallback(() => {
     setLoading(true);
@@ -100,9 +110,81 @@ export default function LeadsPage() {
       .catch(() => setLoading(false));
   }, []);
 
-  useEffect(() => { fetchLeads(); }, [fetchLeads]);
+  useEffect(() => {
+    fetchLeads();
+  }, [fetchLeads]);
 
-  const SENT_STATES = new Set(["contacted", "replied", "converted", "meeting_booked", "unsubscribed", "bounced"]);
+  const campaigns = useMemo(
+    () => Array.from(new Set(leads.map((l) => l.campaign.name))),
+    [leads]
+  );
+
+  const filtered = useMemo(() => {
+    const list = leads.filter((l) => {
+      if (campaignFilter !== "all" && l.campaign.name !== campaignFilter) return false;
+      if (stateFilter !== "all" && l.state !== stateFilter) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchCompany = l.companyName?.toLowerCase().includes(q);
+        const matchEmail = l.email?.toLowerCase().includes(q);
+        const matchWebsite = l.website?.toLowerCase().includes(q);
+        if (!matchCompany && !matchEmail && !matchWebsite) return false;
+      }
+      return true;
+    });
+    const sorted = [...list].sort((a, b) => {
+      let av: string | number = "";
+      let bv: string | number = "";
+      switch (sort.key) {
+        case "company":
+          av = a.companyName ?? "";
+          bv = b.companyName ?? "";
+          break;
+        case "campaign":
+          av = a.campaign.name;
+          bv = b.campaign.name;
+          break;
+        case "lastTouched":
+          av = new Date(a.updatedAt ?? a.createdAt).getTime();
+          bv = new Date(b.updatedAt ?? b.createdAt).getTime();
+          break;
+        case "state":
+          av = a.state;
+          bv = b.state;
+          break;
+        case "msgs":
+          av = a._count.messages;
+          bv = b._count.messages;
+          break;
+      }
+      if (av < bv) return sort.dir === "asc" ? -1 : 1;
+      if (av > bv) return sort.dir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [leads, campaignFilter, stateFilter, searchQuery, sort]);
+
+  const stateCount = (s: LeadState) => leads.filter((l) => l.state === s).length;
+
+  function toggle(id: string) {
+    setSelection((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+
+  function toggleAll() {
+    if (selection.size === filtered.length) setSelection(new Set());
+    else setSelection(new Set(filtered.map((l) => l.id)));
+  }
+
+  function toggleSort(key: SortKey) {
+    setSort((s) =>
+      s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" }
+    );
+  }
 
   async function handleSend(id: string) {
     setSending(id);
@@ -118,7 +200,11 @@ export default function LeadsPage() {
       setSendError({ id, msg: data.error ?? "Send failed" });
     } else {
       setLeads((prev) =>
-        prev.map((l) => l.id === id ? { ...l, state: "contacted", _count: { messages: l._count.messages + 1 } } : l)
+        prev.map((l) =>
+          l.id === id
+            ? { ...l, state: "contacted", _count: { messages: l._count.messages + 1 } }
+            : l
+        )
       );
     }
   }
@@ -127,6 +213,11 @@ export default function LeadsPage() {
     setRemoving(id);
     await fetch(`/api/leads?id=${id}`, { method: "DELETE" });
     setLeads((prev) => prev.filter((l) => l.id !== id));
+    setSelection((s) => {
+      const n = new Set(s);
+      n.delete(id);
+      return n;
+    });
     setRemoving(null);
     setDeletingLead(null);
   }
@@ -134,10 +225,8 @@ export default function LeadsPage() {
   async function handleUpdateLead(e: React.FormEvent) {
     e.preventDefault();
     if (!editingLead) return;
-
     setUpdating(true);
     setUpdateError(null);
-
     try {
       const res = await fetch("/api/leads", {
         method: "PATCH",
@@ -150,142 +239,134 @@ export default function LeadsPage() {
           state: editForm.state,
         }),
       });
-
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error ?? "Failed to update lead");
       }
-
       const updatedLead = await res.json();
-      
-      setLeads((prev) =>
-        prev.map((l) => (l.id === editingLead.id ? updatedLead : l))
-      );
-
+      setLeads((prev) => prev.map((l) => (l.id === editingLead.id ? updatedLead : l)));
       setEditingLead(null);
-    } catch (err: any) {
-      setUpdateError(err.message ?? "An error occurred");
+    } catch (err) {
+      setUpdateError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setUpdating(false);
     }
   }
 
-  const filtered = leads.filter((l) => {
-    if (campaignFilter !== "all" && l.campaign.name !== campaignFilter) return false;
-    if (stateFilter !== "all" && l.state !== stateFilter) return false;
-    
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchCompany = l.companyName?.toLowerCase().includes(q);
-      const matchEmail = l.email?.toLowerCase().includes(q);
-      const matchWebsite = l.website?.toLowerCase().includes(q);
-      if (!matchCompany && !matchEmail && !matchWebsite) return false;
-    }
-    
-    return true;
-  });
-
-  const selectCls = [
-    "bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs rounded px-2 py-1.5",
-    "focus:outline-none focus:border-[oklch(0.78_0.18_65)]",
-  ].join(" ");
-
-  const gridStyle = { gridTemplateColumns: "2fr 2fr 2fr 110px 52px 170px" };
+  const rowPad = density === "compact" ? "py-[7px]" : "py-[11px]";
+  const gridCols = "36px 2fr 1.6fr 1.4fr 110px 120px 56px 110px";
 
   return (
-    <div>
+    <div className="flex flex-col gap-5">
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex items-end justify-between gap-4">
         <div>
-          <h1
-            className="text-xl font-semibold text-zinc-100 mb-1"
-            style={{ fontFamily: "'DM Mono', monospace" }}
-          >
-            Leads
-          </h1>
-          <p className="text-sm text-zinc-500">
-            {loading ? "Loading…" : `${filtered.length} lead${filtered.length !== 1 ? "s" : ""}`}
-            {!loading && leads.length !== filtered.length ? ` of ${leads.length}` : ""}
+          <h1 className="ds-h1 m-0 mb-1">Leads</h1>
+          <p className="font-mono text-[12px] text-fg-4 m-0">
+            {loading ? (
+              "Loading…"
+            ) : (
+              <>
+                <span className="text-fg-2">{filtered.length}</span> leads
+                {filtered.length !== leads.length && <> · filtered from {leads.length}</>}
+                {selection.size > 0 && (
+                  <>
+                    {" · "}
+                    <span className="text-amber">{selection.size} selected</span>
+                  </>
+                )}
+              </>
+            )}
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Segmented
+            value={density}
+            onChange={setDensity}
+            options={[
+              { value: "comfortable", label: "Cozy" },
+              { value: "compact", label: "Dense" },
+            ]}
+          />
+          <Link href="/campaigns/new">
+            <Button iconStart="plus">New Campaign</Button>
+          </Link>
         </div>
       </div>
 
-      {/* Search & Filters Controls */}
+      {/* State filter chips */}
       {!loading && leads.length > 0 && (
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-6 p-4 rounded-lg border border-zinc-800/80 bg-zinc-950/40 backdrop-blur-sm animate-fade-in">
-          {/* Search bar */}
-          <div className="relative flex-1 max-w-md">
-            <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-zinc-500">
-              <Search className="w-4 h-4" />
-            </span>
-            <input
-              type="text"
-              placeholder="Search by company, email, website..."
+        <div className="flex flex-wrap gap-1.5">
+          <FilterChip
+            active={stateFilter === "all"}
+            onClick={() => setStateFilter("all")}
+            count={leads.length}
+          >
+            All
+          </FilterChip>
+          {STATE_KEYS.map((s) => (
+            <FilterChip
+              key={s}
+              active={stateFilter === s}
+              onClick={() => setStateFilter(s)}
+              count={stateCount(s)}
+            >
+              {s}
+            </FilterChip>
+          ))}
+        </div>
+      )}
+
+      {/* Search + filter row */}
+      {!loading && leads.length > 0 && (
+        <div className="flex items-center gap-3 px-3.5 py-2.5 bg-surface border border-border rounded-lg">
+          <div className="flex-1 max-w-[360px]">
+            <Input
+              iconStart="search"
+              placeholder="Search by company, email, website…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-zinc-900/60 border border-zinc-800 text-zinc-100 text-sm rounded-lg pl-9 pr-8 py-2 focus:outline-none focus:border-[oklch(0.78_0.18_65)] transition-colors placeholder-zinc-500"
-              style={{ fontFamily: "'DM Mono', monospace" }}
+              onClear={() => setSearchQuery("")}
             />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute inset-y-0 right-2.5 flex items-center text-zinc-500 hover:text-zinc-300"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
           </div>
-
-          {/* Filter selects */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-xs text-zinc-500" style={{ fontFamily: "'DM Mono', monospace" }}>
-              <Filter className="w-3.5 h-3.5" />
-              <span>Filters:</span>
-            </div>
-            
-            <select
-              className={`${selectCls} min-w-[140px] py-2 rounded-lg bg-zinc-900/60`}
+          <div className="ml-auto flex items-center gap-2.5">
+            <Icon name="filter" size={14} className="text-fg-4" />
+            <Select
               value={campaignFilter}
               onChange={(e) => setCampaignFilter(e.target.value)}
+              className="min-w-[180px]"
             >
               <option value="all">All Campaigns</option>
               {campaigns.map((c) => (
-                <option key={c} value={c}>{c}</option>
+                <option key={c} value={c}>
+                  {c}
+                </option>
               ))}
-            </select>
-
-            <select
-              className={`${selectCls} min-w-[120px] py-2 rounded-lg bg-zinc-900/60`}
-              value={stateFilter}
-              onChange={(e) => setStateFilter(e.target.value)}
-            >
-              <option value="all">All States</option>
-              {Object.keys(STATE_STYLES).map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
+            </Select>
           </div>
+        </div>
+      )}
+
+      {/* Bulk action toolbar */}
+      {selection.size > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-amber-tinted-surface border border-amber-border rounded-lg">
+          <span className="font-mono text-[12px] text-amber font-semibold">
+            {selection.size} selected
+          </span>
+          <span className="flex-1" />
+          <Button size="sm" variant="secondary" onClick={() => setSelection(new Set())}>
+            Clear
+          </Button>
         </div>
       )}
 
       {/* Skeleton */}
       {loading && (
-        <div className="flex flex-col gap-px">
-          <div className="grid gap-0" style={gridStyle}>
-            {["Company", "Email", "Website", "State", "Msgs", ""].map((h) => (
-              <div
-                key={h}
-                className="px-3 py-2.5 text-xs text-zinc-550 uppercase tracking-wider border-b border-zinc-800"
-                style={{ fontFamily: "'DM Mono', monospace" }}
-              >
-                {h}
-              </div>
-            ))}
-          </div>
-          {[...Array(5)].map((_, i) => (
+        <div className="border border-border rounded-lg overflow-hidden">
+          {[...Array(6)].map((_, i) => (
             <div
               key={i}
-              className="h-11 animate-pulse border-b border-zinc-900"
+              className="h-11 ds-pulse border-b border-border-soft last:border-b-0"
               style={{ background: "oklch(0.12 0 0)", animationDelay: `${i * 60}ms` }}
             />
           ))}
@@ -294,351 +375,390 @@ export default function LeadsPage() {
 
       {/* Empty state */}
       {!loading && leads.length === 0 && (
-        <div className="border border-dashed border-zinc-800 rounded p-12 text-center animate-fade-in">
-          <p className="text-sm text-zinc-500 mb-3">No leads yet.</p>
-          <a
-            href="/campaigns/new"
-            className="text-sm underline underline-offset-4"
-            style={{ color: "oklch(0.78 0.18 65)" }}
-          >
-            Launch a campaign to find leads →
-          </a>
-        </div>
+        <EmptyState action={{ label: "Launch a campaign to find leads →", href: "/campaigns/new" }}>
+          No leads yet.
+        </EmptyState>
       )}
 
       {/* Table */}
       {!loading && leads.length > 0 && (
-        <div className="rounded border border-zinc-800 overflow-hidden animate-fade-in">
+        <div className="bg-surface border border-border rounded-lg overflow-hidden">
           {/* Header row */}
           <div
-            className="grid border-b border-zinc-800"
-            style={gridStyle}
+            className="grid border-b border-border bg-[oklch(0.115_0_0)] sticky top-0 z-[2]"
+            style={{ gridTemplateColumns: gridCols }}
           >
-            {["Company", "Email", "Website", "State", "Msgs", ""].map((h) => (
-              <div
-                key={h}
-                className="px-3 py-2.5 text-xs text-zinc-500 uppercase tracking-wider"
-                style={{ fontFamily: "'DM Mono', monospace", background: "oklch(0.11 0 0)" }}
-              >
-                {h}
-              </div>
-            ))}
+            <div className="px-3 py-2.5 flex items-center">
+              <Checkbox
+                checked={selection.size === filtered.length && filtered.length > 0}
+                onChange={toggleAll}
+              />
+            </div>
+            <SortHeader label="Company" sortKey="company" sort={sort} onClick={toggleSort} />
+            <SortHeader label="Campaign" sortKey="campaign" sort={sort} onClick={toggleSort} />
+            <SortHeader
+              label="Last touched"
+              sortKey="lastTouched"
+              sort={sort}
+              onClick={toggleSort}
+            />
+            <SortHeader label="State" sortKey="state" sort={sort} onClick={toggleSort} />
+            <SortHeader label="Engagement" />
+            <SortHeader label="Msgs" sortKey="msgs" sort={sort} onClick={toggleSort} alignRight />
+            <SortHeader label="" />
           </div>
 
           {/* Data rows */}
           {filtered.length === 0 ? (
-            <div className="px-4 py-8 text-center text-sm text-zinc-650" style={{ fontFamily: "'DM Mono', monospace" }}>
-              No leads match the current search query or filters.
+            <div className="px-5 py-10">
+              <EmptyState>No leads match the current search query or filters.</EmptyState>
             </div>
           ) : (
             filtered.map((lead, idx) => (
-              <div
+              <LeadRow
                 key={lead.id}
-                className="grid border-b border-zinc-900 hover:bg-zinc-900/60 transition-colors group"
-                style={{
-                  ...gridStyle,
-                  background: idx % 2 === 0 ? "oklch(0.115 0 0)" : "oklch(0.105 0 0)",
+                lead={lead}
+                idx={idx}
+                density={density}
+                rowPad={rowPad}
+                gridCols={gridCols}
+                selected={selection.has(lead.id)}
+                onToggle={() => toggle(lead.id)}
+                onEdit={() => {
+                  setEditingLead(lead);
+                  setEditForm({
+                    companyName: lead.companyName,
+                    email: lead.email || "",
+                    website: lead.website || "",
+                    state: lead.state,
+                  });
+                  setUpdateError(null);
                 }}
-              >
-                {/* Company */}
-                <div className="px-3 py-2.5 flex items-center min-w-0">
-                  <span
-                    className="text-sm text-zinc-100 truncate"
-                    style={{ fontFamily: "'DM Mono', monospace" }}
-                    title={lead.companyName}
-                  >
-                    {lead.companyName}
-                  </span>
-                </div>
-
-                {/* Email */}
-                <div className="px-3 py-2.5 flex items-center min-w-0">
-                  {lead.email ? (
-                    <a
-                      href={`mailto:${lead.email}`}
-                      className="text-xs truncate hover:underline"
-                      style={{ color: "oklch(0.65 0 0)", fontFamily: "'DM Mono', monospace" }}
-                      title={lead.email}
-                    >
-                      {lead.email}
-                    </a>
-                  ) : (
-                    <span className="text-xs text-zinc-700" style={{ fontFamily: "'DM Mono', monospace" }}>—</span>
-                  )}
-                </div>
-
-                {/* Website */}
-                <div className="px-3 py-2.5 flex items-center min-w-0">
-                  {lead.website ? (
-                    <TruncatedUrl href={lead.website} />
-                  ) : (
-                    <span className="text-xs text-zinc-700" style={{ fontFamily: "'DM Mono', monospace" }}>—</span>
-                  )}
-                </div>
-
-                {/* State */}
-                <div className="px-3 py-2.5 flex items-center">
-                  <StateBadge state={lead.state} />
-                </div>
-
-                {/* Messages count */}
-                <div className="px-3 py-2.5 flex items-center">
-                  <span
-                    className="text-xs"
-                    style={{
-                      color: lead._count.messages > 0 ? "oklch(0.78 0.18 65)" : "oklch(0.35 0 0)",
-                      fontFamily: "'DM Mono', monospace",
-                    }}
-                  >
-                    {lead._count.messages}
-                  </span>
-                </div>
-
-                {/* Actions */}
-                <div className="px-2 py-2 flex flex-col justify-center">
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => handleSend(lead.id)}
-                      disabled={sending === lead.id || SENT_STATES.has(lead.state) || !lead.email}
-                      title={!lead.email ? "No email address" : SENT_STATES.has(lead.state) ? `Already ${lead.state}` : "Send personalized email"}
-                      className="px-2 py-1 rounded text-[10px] font-medium transition-opacity disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                      style={{
-                        background: "oklch(0.20 0.04 65)",
-                        color: "oklch(0.78 0.18 65)",
-                        border: "1px solid oklch(0.28 0.06 65)",
-                        fontFamily: "'DM Mono', monospace",
-                      }}
-                    >
-                      {sending === lead.id ? "…" : "Send"}
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setEditingLead(lead);
-                        setEditForm({
-                          companyName: lead.companyName,
-                          email: lead.email || "",
-                          website: lead.website || "",
-                          state: lead.state,
-                        });
-                        setUpdateError(null);
-                      }}
-                      title="Edit lead details"
-                      className="px-2 py-1 rounded text-[10px] font-medium transition-all hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-zinc-700 cursor-pointer"
-                      style={{
-                        fontFamily: "'DM Mono', monospace",
-                      }}
-                    >
-                      Edit
-                    </button>
-
-                    <button
-                      onClick={() => setDeletingLead(lead)}
-                      disabled={removing === lead.id}
-                      title="Remove lead"
-                      className="px-2 py-1 rounded text-[10px] transition-opacity hover:opacity-100 opacity-0 group-hover:opacity-70 cursor-pointer"
-                      style={{
-                        background: "oklch(0.18 0.03 25)",
-                        color: "oklch(0.60 0.12 25)",
-                        border: "1px solid oklch(0.26 0.05 25)",
-                        fontFamily: "'DM Mono', monospace",
-                      }}
-                    >
-                      {removing === lead.id ? "…" : "✕"}
-                    </button>
-                  </div>
-                  {sendError?.id === lead.id && (
-                    <p className="text-[9px] mt-1 text-red-400 leading-none" style={{ fontFamily: "'DM Mono', monospace" }}>
-                      {sendError.msg}
-                    </p>
-                  )}
-                </div>
-              </div>
+                onDelete={() => setDeletingLead(lead)}
+                onSend={() => handleSend(lead.id)}
+                sending={sending === lead.id}
+                removing={removing === lead.id}
+                sendError={sendError?.id === lead.id ? sendError.msg : null}
+              />
             ))
           )}
         </div>
       )}
 
       {/* Edit Lead Modal */}
-      {editingLead && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
-          <div 
-            className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl relative animate-scale-up"
-            style={{ background: "oklch(0.10 0 0)" }}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-zinc-900 pb-4 mb-5">
-              <h2 className="text-sm font-semibold text-zinc-100 flex items-center gap-2" style={{ fontFamily: "'DM Mono', monospace" }}>
-                <span className="w-2 h-2 rounded-full bg-[oklch(0.78_0.18_65)] animate-pulse" />
-                Edit Lead Details
-              </h2>
-              <button 
-                onClick={() => setEditingLead(null)}
-                className="text-zinc-500 hover:text-zinc-300 transition-colors p-1 rounded-lg hover:bg-zinc-900 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Error banner */}
-            {updateError && (
-              <div className="mb-4 p-3 rounded-lg bg-red-950/40 border border-red-900/50 text-red-400 text-[10px]" style={{ fontFamily: "'DM Mono', monospace" }}>
-                {updateError}
-              </div>
-            )}
-
-            {/* Form */}
-            <form onSubmit={handleUpdateLead} className="space-y-4">
-              {/* Company Name */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] text-zinc-450 uppercase tracking-wider block" style={{ fontFamily: "'DM Mono', monospace" }}>
-                  Company Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editForm.companyName}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, companyName: e.target.value }))}
-                  className="w-full bg-zinc-900/65 border border-zinc-800 text-zinc-100 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-[oklch(0.78_0.18_65)] transition-colors placeholder-zinc-600"
-                  style={{ fontFamily: "'DM Mono', monospace" }}
-                />
-              </div>
-
-              {/* Email */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] text-zinc-450 uppercase tracking-wider block" style={{ fontFamily: "'DM Mono', monospace" }}>
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  value={editForm.email}
-                  placeholder="contact@company.com"
-                  onChange={(e) => setEditForm(prev => ({ ...prev, email: e.target.value }))}
-                  className="w-full bg-zinc-900/65 border border-zinc-800 text-zinc-100 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-[oklch(0.78_0.18_65)] transition-colors placeholder-zinc-600"
-                  style={{ fontFamily: "'DM Mono', monospace" }}
-                />
-              </div>
-
-              {/* Website */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] text-zinc-450 uppercase tracking-wider block" style={{ fontFamily: "'DM Mono', monospace" }}>
-                  Website URL
-                </label>
-                <input
-                  type="text"
-                  value={editForm.website}
-                  placeholder="https://company.com"
-                  onChange={(e) => setEditForm(prev => ({ ...prev, website: e.target.value }))}
-                  className="w-full bg-zinc-900/65 border border-zinc-800 text-zinc-100 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-[oklch(0.78_0.18_65)] transition-colors placeholder-zinc-600"
-                  style={{ fontFamily: "'DM Mono', monospace" }}
-                />
-              </div>
-
-              {/* State */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] text-zinc-450 uppercase tracking-wider block" style={{ fontFamily: "'DM Mono', monospace" }}>
-                  Lead State
-                </label>
-                <select
-                  value={editForm.state}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, state: e.target.value }))}
-                  className="w-full bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs rounded px-3 py-2 focus:outline-none focus:border-[oklch(0.78_0.18_65)]"
-                  style={{ fontFamily: "'DM Mono', monospace" }}
-                >
-                  {Object.keys(STATE_STYLES).map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center justify-end gap-3 border-t border-zinc-900 pt-5 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setEditingLead(null)}
-                  className="px-3 py-1.5 rounded text-xs text-zinc-450 hover:text-zinc-200 hover:bg-zinc-900 transition-colors border border-transparent cursor-pointer"
-                  style={{ fontFamily: "'DM Mono', monospace" }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={updating}
-                  className="px-3 py-1.5 rounded text-xs font-semibold transition-opacity disabled:opacity-50 flex items-center gap-2 cursor-pointer"
-                  style={{
-                    background: "oklch(0.20 0.04 65)",
-                    color: "oklch(0.78 0.18 65)",
-                    border: "1px solid oklch(0.28 0.06 65)",
-                    fontFamily: "'DM Mono', monospace",
-                  }}
-                >
-                  {updating ? "Saving..." : "Save Changes"}
-                </button>
-              </div>
-            </form>
+      <Dialog
+        open={editingLead !== null}
+        onClose={() => setEditingLead(null)}
+        title="Edit Lead Details"
+        width={440}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setEditingLead(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="edit-lead-form"
+              disabled={updating}
+              iconStart={updating ? "refresh" : undefined}
+            >
+              {updating ? "Saving…" : "Save Changes"}
+            </Button>
+          </>
+        }
+      >
+        {updateError && (
+          <Toast kind="hot" pill="ERROR" className="mb-4">
+            {updateError}
+          </Toast>
+        )}
+        <form id="edit-lead-form" onSubmit={handleUpdateLead} className="flex flex-col gap-4">
+          <Input
+            label="Company Name"
+            required
+            value={editForm.companyName}
+            onChange={(e) => setEditForm((p) => ({ ...p, companyName: e.target.value }))}
+          />
+          <Input
+            label="Email Address"
+            type="email"
+            placeholder="contact@company.com"
+            value={editForm.email}
+            onChange={(e) => setEditForm((p) => ({ ...p, email: e.target.value }))}
+          />
+          <Input
+            label="Website URL"
+            placeholder="https://company.com"
+            value={editForm.website}
+            onChange={(e) => setEditForm((p) => ({ ...p, website: e.target.value }))}
+          />
+          <div>
+            <Label>Lead State</Label>
+            <Select
+              value={editForm.state}
+              onChange={(e) => setEditForm((p) => ({ ...p, state: e.target.value }))}
+            >
+              {STATE_KEYS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </Select>
           </div>
-        </div>
-      )}
+        </form>
+      </Dialog>
 
-      {/* Delete Lead Confirmation Modal */}
-      {deletingLead && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
-          <div 
-            className="w-full max-w-sm rounded-xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl relative animate-scale-up"
-            style={{ background: "oklch(0.10 0 0)" }}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-zinc-900 pb-3 mb-4">
-              <h2 className="text-xs font-semibold text-zinc-100 flex items-center gap-2" style={{ fontFamily: "'DM Mono', monospace" }}>
-                <span className="w-2 h-2 rounded-full bg-[oklch(0.60_0.18_25)] animate-pulse" />
-                Confirm Deletion
-              </h2>
-              <button 
-                onClick={() => setDeletingLead(null)}
-                className="text-zinc-500 hover:text-zinc-300 transition-colors p-1 rounded-lg hover:bg-zinc-900 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Warning Message */}
-            <div className="space-y-3 mb-6">
-              <p className="text-xs text-zinc-350 leading-relaxed" style={{ fontFamily: "'DM Mono', monospace" }}>
-                Are you sure you want to delete the lead <strong className="text-zinc-100 font-semibold">{deletingLead.companyName}</strong>?
-              </p>
-              <p className="text-[10px] text-zinc-500 leading-relaxed bg-zinc-900/40 p-2.5 rounded border border-zinc-900" style={{ fontFamily: "'DM Mono', monospace" }}>
-                This action will hide the lead from your active lists. Any scheduled campaign follow-ups for this lead will be halted.
-              </p>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center justify-end gap-3 border-t border-zinc-900 pt-4">
-              <button
-                type="button"
-                onClick={() => setDeletingLead(null)}
-                className="px-3 py-1.5 rounded text-xs text-zinc-450 hover:text-zinc-200 hover:bg-zinc-900 transition-colors border border-transparent cursor-pointer"
-                style={{ fontFamily: "'DM Mono', monospace" }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => handleRemove(deletingLead.id)}
-                disabled={removing === deletingLead.id}
-                className="px-3 py-1.5 rounded text-xs font-semibold transition-opacity disabled:opacity-50 cursor-pointer"
-                style={{
-                  background: "oklch(0.18 0.03 25)",
-                  color: "oklch(0.60 0.12 25)",
-                  border: "1px solid oklch(0.26 0.05 25)",
-                  fontFamily: "'DM Mono', monospace",
-                }}
-              >
-                {removing === deletingLead.id ? "Deleting..." : "Delete Lead"}
-              </button>
-            </div>
+      {/* Delete Lead Modal */}
+      <Dialog
+        open={deletingLead !== null}
+        onClose={() => setDeletingLead(null)}
+        title="Confirm Deletion"
+        dotColor="var(--hot)"
+        width={400}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDeletingLead(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deletingLead ? removing === deletingLead.id : false}
+              onClick={() => deletingLead && handleRemove(deletingLead.id)}
+            >
+              {deletingLead && removing === deletingLead.id ? "Deleting…" : "Delete Lead"}
+            </Button>
+          </>
+        }
+      >
+        {deletingLead && (
+          <div className="flex flex-col gap-3">
+            <p className="font-mono text-[12px] text-fg-3 leading-relaxed m-0">
+              Are you sure you want to delete{" "}
+              <strong className="text-fg-1 font-semibold">{deletingLead.companyName}</strong>?
+            </p>
+            <p className="font-mono text-[11px] text-fg-4 leading-relaxed bg-[oklch(0.13_0_0)] p-2.5 rounded border border-border-soft m-0">
+              This action will hide the lead from your active lists. Any scheduled campaign
+              follow-ups will be halted.
+            </p>
           </div>
+        )}
+      </Dialog>
+    </div>
+  );
+}
+
+function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onChange}
+      className={[
+        "w-3.5 h-3.5 p-0 rounded-[3px] cursor-pointer flex items-center justify-center border transition-colors duration-150",
+        checked
+          ? "border-amber bg-amber"
+          : "border-[oklch(0.30_0_0)] bg-transparent hover:border-fg-4",
+      ].join(" ")}
+    >
+      {checked && <Icon name="check" size={10} className="text-canvas" />}
+    </button>
+  );
+}
+
+function SortHeader({
+  label,
+  sortKey,
+  sort,
+  onClick,
+  alignRight,
+}: {
+  label: string;
+  sortKey?: SortKey;
+  sort?: { key: SortKey; dir: SortDir };
+  onClick?: (key: SortKey) => void;
+  alignRight?: boolean;
+}) {
+  if (!sortKey) {
+    return (
+      <div
+        className={[
+          "px-3 py-2.5 font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4 flex items-center",
+          alignRight ? "justify-end" : "",
+        ].join(" ")}
+      >
+        {label}
+      </div>
+    );
+  }
+  const isActive = sort?.key === sortKey;
+  return (
+    <button
+      type="button"
+      onClick={() => onClick?.(sortKey)}
+      className={[
+        "px-3 py-2.5 bg-transparent border-0 cursor-pointer font-mono text-[10px] uppercase tracking-[0.08em] flex items-center gap-1 transition-colors duration-150",
+        isActive ? "text-fg-1" : "text-fg-4 hover:text-fg-3",
+        alignRight ? "justify-end" : "justify-start",
+      ].join(" ")}
+    >
+      <span>{label}</span>
+      <span className={isActive ? "opacity-100" : "opacity-40"}>
+        <Icon name={isActive && sort?.dir === "asc" ? "arrowUp" : "arrowDown"} size={10} />
+      </span>
+    </button>
+  );
+}
+
+function LeadRow({
+  lead,
+  idx,
+  density,
+  rowPad,
+  gridCols,
+  selected,
+  onToggle,
+  onEdit,
+  onDelete,
+  onSend,
+  sending,
+  removing,
+  sendError,
+}: {
+  lead: Lead;
+  idx: number;
+  density: "comfortable" | "compact";
+  rowPad: string;
+  gridCols: string;
+  selected: boolean;
+  onToggle: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onSend: () => void;
+  sending: boolean;
+  removing: boolean;
+  sendError: string | null;
+}) {
+  const msgs = lead._count.messages;
+  const engagement = Math.min(
+    100,
+    msgs * 18 + (lead.state === "replied" || lead.state === "converted" ? 30 : 0)
+  );
+  const engColor =
+    lead.state === "replied" || lead.state === "converted"
+      ? "var(--success)"
+      : engagement > 0
+        ? "var(--amber)"
+        : "oklch(0.18 0 0)";
+  const alreadySent = SENT_STATES.has(lead.state);
+  const lastTouched = relativeTime(lead.updatedAt ?? lead.createdAt);
+
+  return (
+    <div
+      className="grid border-b border-border-soft last:border-b-0 group hover:bg-[oklch(0.12_0_0)] transition-colors duration-100"
+      style={{
+        gridTemplateColumns: gridCols,
+        background: idx % 2 === 0 ? "var(--surface)" : "oklch(0.135 0 0)",
+      }}
+    >
+      <div className={`px-3 ${rowPad} flex items-center`} onClick={(e) => e.stopPropagation()}>
+        <Checkbox checked={selected} onChange={onToggle} />
+      </div>
+
+      {/* Company */}
+      <div className={`px-3 ${rowPad} flex items-center gap-2.5 min-w-0`}>
+        <Avatar name={lead.companyName} size={22} />
+        <div className="min-w-0 flex-1">
+          <p
+            className="font-sans text-[13px] text-fg-1 m-0 leading-tight font-medium tracking-[-0.01em] truncate"
+            title={lead.companyName}
+          >
+            {lead.companyName}
+          </p>
+          {density !== "compact" && (lead.email || lead.website) && (
+            <p className="font-mono text-[10.5px] text-fg-4 m-0 mt-px truncate">
+              {lead.email || (lead.website ? truncateUrl(lead.website) : "")}
+            </p>
+          )}
         </div>
-      )}
+      </div>
+
+      {/* Campaign */}
+      <div
+        className={`px-3 ${rowPad} font-mono text-[11px] text-fg-3 flex items-center min-w-0 truncate`}
+      >
+        {lead.campaign.name}
+      </div>
+
+      {/* Last touched */}
+      <div className={`px-3 ${rowPad} font-mono text-[11px] text-fg-4 flex items-center`}>
+        {lastTouched}
+      </div>
+
+      {/* State */}
+      <div className={`px-3 ${rowPad} flex items-center`}>
+        <StateBadge state={lead.state} />
+      </div>
+
+      {/* Engagement */}
+      <div className={`px-3 ${rowPad} flex items-center gap-1.5`}>
+        <div className="flex-1 h-1 bg-[oklch(0.16_0_0)] rounded-sm overflow-hidden">
+          <div
+            className="h-full transition-[width] duration-300"
+            style={{ width: `${engagement}%`, background: engColor }}
+          />
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div
+        className={`px-3 ${rowPad} flex items-center justify-end font-mono text-[12px] tabular-nums`}
+        style={{ color: msgs > 0 ? "var(--amber)" : "var(--fg-5)" }}
+      >
+        {msgs}
+      </div>
+
+      {/* Actions */}
+      <div
+        className="px-2 py-1.5 flex flex-col justify-center items-end gap-0.5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-100">
+          <Button
+            size="sm"
+            variant="tinted"
+            onClick={onSend}
+            disabled={sending || alreadySent || !lead.email}
+            title={
+              !lead.email
+                ? "No email address"
+                : alreadySent
+                  ? `Already ${lead.state}`
+                  : "Send personalized email"
+            }
+          >
+            {sending ? "…" : "Send"}
+          </Button>
+          <button
+            type="button"
+            onClick={onEdit}
+            title="Edit lead details"
+            className="bg-transparent border-0 text-fg-4 hover:text-fg-2 cursor-pointer p-1 flex"
+          >
+            <Icon name="pencil" size={11} />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={removing}
+            title="Remove lead"
+            className="bg-transparent border-0 text-fg-4 hover:text-hot cursor-pointer p-1 flex"
+          >
+            <Icon name="x" size={11} />
+          </button>
+        </div>
+        {sendError && (
+          <p className="font-mono text-[9px] text-hot leading-none m-0">{sendError}</p>
+        )}
+      </div>
     </div>
   );
 }
