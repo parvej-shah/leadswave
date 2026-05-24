@@ -10,7 +10,17 @@ async function getUserId() {
 function parseCSV(text: string): Record<string, string>[] {
   const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   const nonEmpty = lines.filter((l) => l.trim());
-  if (nonEmpty.length < 2) return [];
+  if (nonEmpty.length === 0) return [];
+  if (nonEmpty.length === 1) {
+    const values = parseCSVRow(nonEmpty[0]).map((v) => v.trim());
+    if (values.length < 2) return [];
+    const headers = ["company", "email", "website", "description"].slice(0, values.length);
+    const row: Record<string, string> = {};
+    headers.forEach((h, i) => {
+      row[h] = values[i] ?? "";
+    });
+    return [row];
+  }
 
   const headers = parseCSVRow(nonEmpty[0]).map((h) => h.trim().toLowerCase());
 

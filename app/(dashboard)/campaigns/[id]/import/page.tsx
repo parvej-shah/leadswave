@@ -59,7 +59,19 @@ function parseCSVRow(line: string): string[] {
 
 function parseCSV(text: string): { headers: string[]; rows: ParsedRow[] } {
   const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter((l) => l.trim());
-  if (lines.length < 2) return { headers: [], rows: [] };
+  if (lines.length === 0) return { headers: [], rows: [] };
+  if (lines.length === 1) {
+    const vals = parseCSVRow(lines[0]).map((v) => v.trim());
+    if (vals.length >= 2) {
+      const headers = ["company", "email", "website", "description"].slice(0, vals.length);
+      const row: ParsedRow = {};
+      headers.forEach((h, i) => {
+        row[h] = vals[i] ?? "";
+      });
+      return { headers, rows: [row] };
+    }
+    return { headers: [], rows: [] };
+  }
   const headers = parseCSVRow(lines[0]).map((h) => h.trim());
   const rows = lines.slice(1).map((line) => {
     const vals = parseCSVRow(line);
