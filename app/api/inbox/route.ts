@@ -9,7 +9,6 @@ export async function GET() {
   const leads = await db.lead.findMany({
     where: {
       deletedAt: null,
-      state: { in: ["replied", "converted"] },
       messages: { some: { direction: "inbound" } },
     },
     orderBy: { lastTouchedAt: "desc" },
