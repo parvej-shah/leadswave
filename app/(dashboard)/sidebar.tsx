@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { Avatar, Icon, Kbd, type IconName } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -39,10 +39,16 @@ export type SidebarProps = {
   inboxHotCount: number;
 };
 
+// Map of second-key → route for G→x two-key navigation
+const G_KEYS: Record<string, string> = { d: "/", c: "/campaigns", l: "/leads", i: "/inbox", s: "/settings" };
+
 export function Sidebar({ userEmail, userName, campaigns, inboxHotCount }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const gPending = useRef(false);
+  const gTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -51,6 +57,38 @@ export function Sidebar({ userEmail, userName, campaigns, inboxHotCount }: Sideb
       if (stored === "1") setCollapsed(true);
     } catch {}
   }, []);
+
+  // Two-key G→D/C/L/I/S global navigation (skip when focus is inside an input/textarea)
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement).isContentEditable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      if (gPending.current) {
+        const dest = G_KEYS[e.key.toLowerCase()];
+        if (dest) {
+          e.preventDefault();
+          router.push(dest);
+        }
+        gPending.current = false;
+        if (gTimer.current) clearTimeout(gTimer.current);
+        return;
+      }
+
+      if (e.key === "g") {
+        e.preventDefault();
+        gPending.current = true;
+        gTimer.current = setTimeout(() => { gPending.current = false; }, 800);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      if (gTimer.current) clearTimeout(gTimer.current);
+    };
+  }, [router]);
 
   function toggleCollapse() {
     setCollapsed((c) => {

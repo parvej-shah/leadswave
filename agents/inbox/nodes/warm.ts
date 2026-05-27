@@ -58,7 +58,7 @@ ${state.inboundEmail.body}`;
     });
   }
 
-  if (state.telegramChatId) {
+  if (state.telegramChatId && !state.notifyHotOnly) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
     await sendTelegramMessage(
       state.telegramChatId,

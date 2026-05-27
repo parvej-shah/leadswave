@@ -29,10 +29,14 @@ type Settings = {
   googleRefreshToken: string;
   calendarId: string;
   dailySendLimit: number;
+  perCampaignDailyLimit: number;
+  sendThrottleSeconds: number;
   autoSendReplies: boolean;
+  notifyHotOnly: boolean;
+  notifyEmailDigest: boolean;
 };
 
-type TabKey = "outreach" | "keys" | "calendar" | "limits" | "notifications";
+type TabKey = "outreach" | "keys" | "calendar" | "limits" | "notifications" | "connection";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "outreach", label: "Outreach" },
@@ -40,6 +44,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "calendar", label: "Calendar" },
   { key: "limits", label: "Sending Limits" },
   { key: "notifications", label: "Notifications" },
+  { key: "connection", label: "Connection" },
 ];
 
 const DEFAULTS: Settings = {
@@ -55,7 +60,11 @@ const DEFAULTS: Settings = {
   googleRefreshToken: "",
   calendarId: "primary",
   dailySendLimit: 100,
+  perCampaignDailyLimit: 50,
+  sendThrottleSeconds: 30,
   autoSendReplies: false,
+  notifyHotOnly: false,
+  notifyEmailDigest: false,
 };
 
 function SecretInput({
@@ -106,16 +115,25 @@ export default function SettingsPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [form, setForm] = useState<Settings>(DEFAULTS);
 
+  type GoogleProfile = { connected: boolean; name?: string; email?: string; image?: string };
+  const [googleProfile, setGoogleProfile] = useState<GoogleProfile | null>(null);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [sendingDigest, setSendingDigest] = useState(false);
+  const [digestResult, setDigestResult] = useState<"sent" | "error" | null>(null);
+
   useEffect(() => {
-    fetch("/api/settings")
-      .then((r) => r.json())
-      .then((data) => {
+    Promise.all([
+      fetch("/api/settings").then((r) => r.json()),
+      fetch("/api/auth/google/profile").then((r) => r.json()),
+    ])
+      .then(([data, profile]) => {
         setForm({
           ...DEFAULTS,
           ...Object.fromEntries(
             Object.entries(data).filter(([, v]) => v !== null && v !== undefined)
           ),
         });
+        setGoogleProfile(profile);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -124,6 +142,33 @@ export default function SettingsPage() {
   function set<K extends keyof Settings>(key: K, value: Settings[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
     setSaveState("idle");
+  }
+
+  async function handleDisconnect() {
+    setDisconnecting(true);
+    try {
+      await fetch("/api/auth/google/disconnect", { method: "DELETE" });
+      setGoogleProfile({ connected: false });
+      setForm((prev) => ({ ...prev, googleRefreshToken: "" }));
+    } catch {
+      // ignore
+    } finally {
+      setDisconnecting(false);
+    }
+  }
+
+  async function handleSendDigest() {
+    setSendingDigest(true);
+    setDigestResult(null);
+    try {
+      const res = await fetch("/api/cron/digest");
+      setDigestResult(res.ok ? "sent" : "error");
+    } catch {
+      setDigestResult("error");
+    } finally {
+      setSendingDigest(false);
+      setTimeout(() => setDigestResult(null), 3000);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -317,7 +362,37 @@ export default function SettingsPage() {
                       Math.min(500, Math.max(1, parseInt(e.target.value) || 1))
                     )
                   }
-                  hint="Max emails sent per 24h (max 500)"
+                  hint="Max emails sent per 24h across all campaigns (max 500)"
+                />
+                <Input
+                  label="Per-campaign daily limit"
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={form.perCampaignDailyLimit}
+                  onChange={(e) =>
+                    set(
+                      "perCampaignDailyLimit",
+                      Math.min(500, Math.max(1, parseInt(e.target.value) || 1))
+                    )
+                  }
+                  hint="Max emails per campaign per day (max 500)"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Throttle (seconds between sends)"
+                  type="number"
+                  min={0}
+                  max={3600}
+                  value={form.sendThrottleSeconds}
+                  onChange={(e) =>
+                    set(
+                      "sendThrottleSeconds",
+                      Math.min(3600, Math.max(0, parseInt(e.target.value) || 0))
+                    )
+                  }
+                  hint="Minimum gap between outbound emails (0 = no delay)"
                 />
                 <div>
                   <Label>Auto-send replies</Label>
@@ -336,7 +411,7 @@ export default function SettingsPage() {
               <div className="px-3.5 py-2.5 bg-info-tinted-surface border border-info-border rounded-md flex gap-2.5 items-start">
                 <Icon name="pulse" size={14} className="text-info mt-0.5" />
                 <p className="font-mono text-[11px] text-info m-0 leading-[1.55]">
-                  LeadsWave paces sends throughout the day to stay under your daily cap.
+                  LeadsWave paces sends throughout the day to stay under your daily cap. Per-campaign and throttle limits apply on top.
                 </p>
               </div>
             </CardBody>
@@ -344,16 +419,135 @@ export default function SettingsPage() {
         )}
 
         {tab === "notifications" && (
+          <div className="flex flex-col gap-4">
+            <Card>
+              <CardHeader>Telegram</CardHeader>
+              <CardBody className="flex flex-col gap-4">
+                <Input
+                  label="Telegram Chat ID"
+                  value={form.telegramChatId}
+                  readOnly
+                  placeholder="—"
+                  hint="Auto-detected from your Telegram bot. Send any message to your bot to populate this."
+                />
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-mono text-[12.5px] text-fg-2 m-0">HOT-only alerts</p>
+                      <p className="font-mono text-[11px] text-fg-4 m-0 mt-0.5">
+                        Only send Telegram pings for HOT leads and meeting bookings. Warm "has a question" pings are suppressed.
+                      </p>
+                    </div>
+                    <Toggle
+                      checked={form.notifyHotOnly}
+                      onChange={(v) => set("notifyHotOnly", v)}
+                      label={form.notifyHotOnly ? "enabled" : "disabled"}
+                    />
+                  </div>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-mono text-[12.5px] text-fg-2 m-0">Daily digest</p>
+                      <p className="font-mono text-[11px] text-fg-4 m-0 mt-0.5">
+                        Send a daily summary to Telegram every morning with yesterday's sends, replies, hot leads, and meetings.
+                      </p>
+                    </div>
+                    <Toggle
+                      checked={form.notifyEmailDigest}
+                      onChange={(v) => set("notifyEmailDigest", v)}
+                      label={form.notifyEmailDigest ? "enabled" : "disabled"}
+                    />
+                  </div>
+                </div>
+                {form.notifyEmailDigest && form.telegramChatId && (
+                  <div className="flex items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={sendingDigest}
+                      onClick={handleSendDigest}
+                    >
+                      {sendingDigest ? "Sending…" : "Send digest now"}
+                    </Button>
+                    {digestResult === "sent" && (
+                      <span className="font-mono text-[11px] text-success">Sent ✓</span>
+                    )}
+                    {digestResult === "error" && (
+                      <span className="font-mono text-[11px] text-hot">Failed — check Telegram config</span>
+                    )}
+                  </div>
+                )}
+              </CardBody>
+            </Card>
+          </div>
+        )}
+
+        {tab === "connection" && (
           <Card>
-            <CardHeader>Notifications</CardHeader>
-            <CardBody className="flex flex-col gap-4">
-              <Input
-                label="Telegram Chat ID"
-                value={form.telegramChatId}
-                readOnly
-                placeholder="—"
-                hint="Auto-detected from your Telegram bot. Send any message to your bot to populate this."
-              />
+            <CardHeader>Google Account</CardHeader>
+            <CardBody className="flex flex-col gap-5">
+              {googleProfile?.connected ? (
+                <div className="flex items-center gap-4">
+                  {googleProfile.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={googleProfile.image}
+                      alt={googleProfile.name ?? "Google account"}
+                      className="w-10 h-10 rounded-full border border-border shrink-0"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full border border-border bg-[oklch(0.18_0_0)] flex items-center justify-center shrink-0">
+                      <Icon name="users" size={16} className="text-fg-4" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-mono text-[13px] text-fg-1 m-0 truncate">
+                      {googleProfile.name ?? "—"}
+                    </p>
+                    <p className="font-mono text-[11px] text-fg-4 m-0 truncate">
+                      {googleProfile.email ?? "—"}
+                    </p>
+                    <p className="font-mono text-[10px] text-fg-5 m-0 mt-0.5">
+                      Calendar · Read &amp; Send
+                    </p>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        window.location.href = "/api/auth/signin/google";
+                      }}
+                    >
+                      Reconnect
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      disabled={disconnecting}
+                      onClick={handleDisconnect}
+                    >
+                      {disconnecting ? "Disconnecting…" : "Disconnect"}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <p className="font-mono text-[12px] text-fg-4 m-0">
+                    No Google account connected. Sign in with Google to enable Calendar and Gmail integration.
+                  </p>
+                  <div>
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        window.location.href = "/api/auth/signin/google";
+                      }}
+                    >
+                      Connect Google Account
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardBody>
           </Card>
         )}

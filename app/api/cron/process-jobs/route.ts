@@ -61,8 +61,32 @@ export async function POST(req: NextRequest) {
     ? `${settings.fromName} <${settings.fromEmail}>`
     : settings.fromEmail;
 
+  const perCampaignCap = settings.perCampaignDailyLimit ?? 50;
+  const throttleMs = (settings.sendThrottleSeconds ?? 30) * 1000;
+
+  // Count outbound messages sent today, grouped by campaign
+  const dayStart = new Date(now);
+  dayStart.setUTCHours(0, 0, 0, 0);
+  const todayCountRows = await db.message.groupBy({
+    by: ["leadId"],
+    where: { direction: "outbound", sentAt: { gte: dayStart } },
+    _count: true,
+  });
+  // Build campaignId → sends-today map
+  const leadIds = todayCountRows.map((r) => r.leadId);
+  const leadsForCount = leadIds.length
+    ? await db.lead.findMany({ where: { id: { in: leadIds } }, select: { id: true, campaignId: true } })
+    : [];
+  const campaignSentToday = new Map<string, number>();
+  for (const row of todayCountRows) {
+    const lead = leadsForCount.find((l) => l.id === row.leadId);
+    if (!lead) continue;
+    campaignSentToday.set(lead.campaignId, (campaignSentToday.get(lead.campaignId) ?? 0) + row._count);
+  }
+
   let processed = 0;
   let failed = 0;
+  let lastSentAt = 0;
 
   for (const job of jobs) {
     const lead = job.lead;
@@ -80,6 +104,18 @@ export async function POST(req: NextRequest) {
     if (!lead.email) {
       await db.job.update({ where: { id: job.id }, data: { status: "cancelled" } });
       continue;
+    }
+
+    // Per-campaign daily cap
+    const campaignSent = campaignSentToday.get(lead.campaignId) ?? 0;
+    if (campaignSent >= perCampaignCap) continue;
+
+    // Throttle: enforce minimum gap between sends
+    if (throttleMs > 0 && lastSentAt > 0) {
+      const elapsed = Date.now() - lastSentAt;
+      if (elapsed < throttleMs) {
+        await new Promise((r) => setTimeout(r, throttleMs - elapsed));
+      }
     }
 
     const followupNum = FOLLOWUP_NUMBER[job.type] ?? 2;
@@ -127,11 +163,13 @@ Return plain text only — no greeting, no sign-off.`;
         }),
         db.lead.update({
           where: { id: lead.id },
-          data: { lastTouchedAt: new Date() },
+          data: { state: "contacted", lastTouchedAt: new Date() },
         }),
         db.job.update({ where: { id: job.id }, data: { status: "done" } }),
       ]);
 
+      lastSentAt = Date.now();
+      campaignSentToday.set(lead.campaignId, (campaignSentToday.get(lead.campaignId) ?? 0) + 1);
       processed++;
     } catch (err) {
       console.error(`[cron] Failed to send follow-up for lead ${lead.id}:`, err);

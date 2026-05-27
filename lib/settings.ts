@@ -16,6 +16,8 @@ export type SystemSettings = {
   calendarId: string;
   dailySendLimit: number;
   autoSendReplies: boolean;
+  notifyHotOnly: boolean;
+  notifyEmailDigest: boolean;
 };
 
 export async function getSystemSettings(): Promise<SystemSettings> {
@@ -37,5 +39,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     calendarId: dbSettings?.calendarId || process.env.CALENDAR_ID || "primary",
     dailySendLimit: dbSettings?.dailySendLimit ?? Number(process.env.DAILY_SEND_LIMIT ?? 100),
     autoSendReplies: dbSettings?.autoSendReplies ?? (process.env.AUTO_SEND_REPLIES === "true"),
+    notifyHotOnly: dbSettings?.notifyHotOnly ?? false,
+    notifyEmailDigest: dbSettings?.notifyEmailDigest ?? false,
   };
 }

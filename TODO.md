@@ -5,29 +5,21 @@ listed here so it isn't forgotten, but not currently blocking.
 
 ## Dashboard
 
-- [ ] **KPI sparklines (7-day trend per metric)**
-      Each KPI tile should show a 7-day area sparkline beneath the value.
-      Needs a backend query that buckets `Message` rows by day for the last 7
-      days (one query per metric, or one grouped query). The `KPI` primitive in
-      `components/ui/kpi.tsx` already accepts `spark: number[]` and
-      `sparkColor` — just pass the buckets in from
-      `app/(dashboard)/page.tsx`.
+- [x] **KPI sparklines (7-day trend per metric)**
+      Shipped: `sparkBuckets()` helper in `app/(dashboard)/page.tsx` builds 7-day
+      day-by-day counts for sent, replies, hot leads, meetings, and total leads.
+      Passed as `spark[]` + `sparkColor` to each `KPI` tile.
 
-- [ ] **"Needs your attention" triage row**
-      3-tile row above the KPI strip surfacing: HOT replies waiting, today's
-      meetings, scouts pending review. Needs a product decision on what
-      qualifies as "needs review" (probably: leads in `discovered` state from
-      the last scout run that haven't been contacted yet). See the DS
-      reference at
-      `LeadsWave Design System/ui_kits/leadswave-app/screens/Dashboard.jsx`
-      → `NeedsAttention`.
+- [x] **"Needs your attention" triage row**
+      Shipped: `NeedsAttention` component in `app/(dashboard)/page.tsx`. Shows up to
+      3 tiles — HOT replies waiting (→ /inbox), today's calendar meetings, and
+      discovered leads pending review (→ /leads). Tiles are hidden when count is 0.
 
-- [ ] **Period switcher (24H / 7D / 30D / YTD)**
-      Segmented control next to the dashboard header that re-scopes KPIs and
-      Campaign Health to a time window. Needs:
-  1. Time-series backend (same query as sparklines, just parameterized).
-  2. URL-driven state (`?period=7d`) so server-rendered KPIs respect it.
-     Use the `Segmented` primitive — it's already shipped.
+- [x] **Period switcher (24H / 7D / 30D / YTD)**
+      Shipped: `DashboardPeriodSwitcher` client component (`dashboard-period-switcher.tsx`)
+      uses `useRouter` + `useSearchParams` to push `?period=` to the URL. Server
+      component reads `searchParams.period` and re-scopes all KPI counts via
+      `periodWindow()`. Sparklines always show 7-day buckets regardless of period.
 
 ## Campaigns
 
@@ -56,11 +48,11 @@ listed here so it isn't forgotten, but not currently blocking.
       inbound bodies. See `LeadsWave Design System/ui_kits/leadswave-app/screens/Inbox.jsx`
       → `LeadContextPanel`.
 
-- [ ] **Inbox keyboard shortcuts (J/K/R/E)**
-      DS reference wires `j`/`k` to navigate threads, `r` to focus composer,
-      `e` to archive. Add `<Kbd>` hints in the list footer and a `keydown`
-      handler scoped to the Inbox route. The global ⌘K palette is already
-      shipped — these are page-local shortcuts on top of it.
+- [x] **Inbox keyboard shortcuts (J/K/R/E)**
+      Shipped: `keydown` handler in `InboxPage` (inbox/page.tsx). J/K navigate
+      threads, R focuses `#inbox-draft`, E archives the selected lead. Uses
+      `useRef` to avoid stale closures. `<Kbd>` hints shown in list footer.
+      Skips when focus is in an input/textarea/contenteditable.
 
 - [ ] **Composer "Insert calendar link" / Signature buttons**
       Toolbar below the textarea in the DS reference. Needs: (a) decision on
@@ -76,18 +68,18 @@ listed here so it isn't forgotten, but not currently blocking.
       `Settings` (or `User`) and the outreach agent to actually append it
       before sending. Tied to the Inbox composer Signature button above.
 
-- [ ] **Per-campaign / throttle sending limits**
-      DS reference exposes three knobs: Daily Cap, Per-Campaign-Per-Day,
-      Throttle (seconds between sends). Today only Daily Cap is wired up
-      end-to-end. Needs schema fields + sender-loop enforcement before
-      surfacing the inputs.
+- [x] **Per-campaign / throttle sending limits**
+      Shipped: `perCampaignDailyLimit` and `sendThrottleSeconds` added to
+      `Settings` schema (migration `20260525000000`). Both enforced in
+      `app/api/cron/process-jobs/route.ts`. UI knobs on the Limits tab in
+      `app/(dashboard)/settings/page.tsx`.
 
-- [ ] **Connection tab (Google account card)**
-      DS reference shows the connected Google identity with Reconnect /
-      Disconnect actions and a scopes line ("Calendar · Gmail · Read &
-      Send"). Today we just show a check on the Calendar tab when a refresh
-      token is present. Needs: profile fetch endpoint + a real "disconnect"
-      that clears the stored refresh token.
+- [x] **Connection tab (Google account card)**
+      Shipped: new "Connection" tab in Settings. `GET /api/auth/google/profile`
+      returns name/email/image from session (only when refresh token is present).
+      `DELETE /api/auth/google/disconnect` clears `googleRefreshToken` from Settings.
+      Card shows avatar, name, email, scopes line, plus Reconnect and Disconnect
+      buttons. Disconnect optimistically updates the UI without a page reload.
 
 - [ ] **Team tab**
       DS reference lists teammates with roles + invite flow. There is no
@@ -95,31 +87,32 @@ listed here so it isn't forgotten, but not currently blocking.
       product expansion, not a UI pass. Park until multi-user is on the
       roadmap.
 
-- [ ] **Notifications: Email digest + HOT-only filter toggles**
-      DS reference offers Telegram + Email-digest + HOT-only toggles. Today
-      only Telegram chat ID is wired (and only as a read-only auto-detected
-      value). Needs: (a) a daily digest job, (b) a notification-preferences
-      field on Settings, (c) wiring HOT-only into the Telegram alert path.
+- [x] **Notifications: Email digest + HOT-only filter toggles**
+      Shipped: `notifyHotOnly` and `notifyEmailDigest` added to `Settings` schema
+      (migration `20260527000000`). `HOT-only` toggle suppresses warm "has a question"
+      Telegram pings while keeping HOT/meeting alerts. Daily digest cron at
+      `GET /api/cron/digest` (scheduled 8am UTC in `vercel.json`) sends yesterday's
+      pipeline summary via Telegram when digest is enabled. Settings Notifications tab
+      has both toggles + "Send digest now" test button.
 
 ## Command Palette (⌘K)
 
-- [ ] **Lead search inside the palette**
-      Currently the palette lists navigation, the 5 most recent campaigns,
-      and a couple of actions. To search across all leads (by company /
-      email) we need either: (a) a `/api/search` endpoint that the palette
-      hits on debounced query, or (b) preloading lead names into the
-      layout payload (only viable for small accounts). Pick after we see
-      how big real accounts get.
+- [x] **Lead search inside the palette**
+      Shipped: `GET /api/search?q=` endpoint searches leads by `companyName`
+      and `email` (case-insensitive, top 8 by `lastTouchedAt`). Palette
+      debounces 200ms, shows a "Leads" group above commands when query ≥ 2
+      chars. Selecting a lead navigates to `/leads?highlight=<id>`. Spinner
+      (animated `refresh` icon) shows while fetching. Keyboard nav unified
+      via `flatItems` array (leads first, then commands).
 
-- [ ] **Recent commands / fuzzy ranking**
-      Today the palette filter is a plain substring `includes`. Real
-      palettes rank by recency + fuzzy match (e.g. fzf-style subsequence
-      scoring). Add a `localStorage`-backed recents list and a small
-      scorer when the command set grows past ~20 items.
+- [x] **Recent commands / fuzzy ranking**
+      Shipped: `localStorage`-backed recents (`lw:cmd-recents`, max 5) saved
+      on every `runAction`. Empty-query view shows a "Recent" group at top.
+      Non-empty query uses a subsequence scorer (consecutive-match bonus) instead
+      of plain `includes`, results sorted by score desc. All in `command-palette.tsx`.
 
-- [ ] **`G D` / `G C` / `G L` / `G I` / `G S` two-key navigation**
-      Sidebar already advertises these key hints in tooltips. Wire a
-      global two-key sequence handler (press `g`, then within 800ms press
-      destination key) so the hints become real shortcuts. Skip inside
-      inputs/textareas. Pair with the Inbox J/K/R/E item above — both want
-      the same "skip when typing" guard.
+- [x] **`G D` / `G C` / `G L` / `G I` / `G S` two-key navigation**
+      Shipped: global `keydown` handler in `Sidebar` (sidebar.tsx). Press `g`,
+      then within 800ms press `d/c/l/i/s` to navigate. Skips when focus is
+      in an input/textarea/contenteditable. Uses a `useRef` pending flag +
+      800ms timeout. Pairs with ⌘K palette and Inbox J/K shortcuts.

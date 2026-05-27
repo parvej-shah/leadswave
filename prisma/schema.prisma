@@ -71,8 +71,12 @@ model Settings {
   googleClientSecret   String?
   googleRefreshToken   String?
   calendarId           String?  @default("primary")
-  dailySendLimit       Int      @default(100)
-  autoSendReplies      Boolean  @default(false)
+  dailySendLimit          Int     @default(100)
+  perCampaignDailyLimit   Int     @default(50)
+  sendThrottleSeconds     Int     @default(30)
+  autoSendReplies         Boolean @default(false)
+  notifyHotOnly           Boolean @default(false)
+  notifyEmailDigest       Boolean @default(false)
 }
 
 model CalendarEvent {

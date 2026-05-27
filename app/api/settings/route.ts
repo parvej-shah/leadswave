@@ -24,8 +24,9 @@ export async function PUT(request: NextRequest) {
   const allowed = [
     "offerText", "fromEmail", "fromName", "telegramChatId",
     "resendApiKey", "firecrawlApiKey", "anthropicApiKey",
-    "calendarId", "dailySendLimit", "autoSendReplies",
-    "googleClientId", "googleClientSecret", "googleRefreshToken",
+    "calendarId", "dailySendLimit", "perCampaignDailyLimit", "sendThrottleSeconds",
+    "autoSendReplies", "googleClientId", "googleClientSecret", "googleRefreshToken",
+    "notifyHotOnly", "notifyEmailDigest",
   ] as const;
 
   const data: Record<string, any> = {};

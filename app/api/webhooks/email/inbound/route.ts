@@ -162,6 +162,7 @@ export async function POST(req: NextRequest) {
       inboundEmail: { from: fromEmail, subject, body, inReplyTo },
       anthropicApiKey: settings.anthropicApiKey ?? "",
       telegramChatId: settings.telegramChatId ?? "",
+      notifyHotOnly: settings.notifyHotOnly ?? false,
     });
     console.log(`[inbound] Inbox agent completed for lead ${lead.id}`);
   } catch (err) {

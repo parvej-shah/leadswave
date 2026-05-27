@@ -41,6 +41,7 @@ const InboxAnnotation = Annotation.Root({
   inboundEmail: Annotation<InboundEmail>(),
   anthropicApiKey: Annotation<string>(),
   telegramChatId: Annotation<string>(),
+  notifyHotOnly: Annotation<boolean>(),
   lead: Annotation<Lead>(),
   campaign: Annotation<Campaign>(),
   priorMessages: Annotation<Message[], Message[]>({

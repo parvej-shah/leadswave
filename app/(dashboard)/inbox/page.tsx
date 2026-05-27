@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import {
   Avatar,
   Badge,
   Button,
   DirectionTag,
   Icon,
+  Kbd,
   Segmented,
   Toast,
 } from "@/components/ui";
@@ -90,14 +91,14 @@ export default function InboxPage() {
     fetchLeads();
   }, [fetchLeads]);
 
-  function selectLead(lead: InboxLead) {
+  const selectLead = useCallback((lead: InboxLead) => {
     setSelected(lead);
     setSendError(null);
     const draft = lead.messages.find((m) => m.direction === "system");
     const text = draft?.body ?? "";
     setDraftText(text);
     setAiDraftOriginal(text);
-  }
+  }, []);
 
   async function handleSendReply() {
     if (!selected || !draftText.trim()) return;
@@ -158,10 +159,10 @@ export default function InboxPage() {
     }
   }
 
-  function handleNotInterested(leadId: string) {
+  const handleNotInterested = useCallback((leadId: string) => {
     setSuppressed((prev) => new Set(prev).add(leadId));
-    if (selected?.id === leadId) setSelected(null);
-  }
+    setSelected((cur) => (cur?.id === leadId ? null : cur));
+  }, []);
 
   const visible = useMemo(() => leads.filter((l) => !suppressed.has(l.id)), [leads, suppressed]);
   const hotCount = visible.filter((l) => classifyLead(l) === "hot").length;
@@ -199,6 +200,43 @@ export default function InboxPage() {
 
   const isAiDraft = !!aiDraftOriginal && draftText === aiDraftOriginal;
 
+  // Keep a stable ref so the keydown handler always sees the current list/selection
+  const filteredRef = useRef(filteredThreads);
+  filteredRef.current = filteredThreads;
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement).isContentEditable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      const threads = filteredRef.current;
+      const cur = selectedRef.current;
+      const idx = cur ? threads.findIndex((l) => l.id === cur.id) : -1;
+
+      if (e.key === "j") {
+        e.preventDefault();
+        const next = threads[idx + 1];
+        if (next) selectLead(next);
+      } else if (e.key === "k") {
+        e.preventDefault();
+        const prev = threads[idx - 1];
+        if (prev) selectLead(prev);
+      } else if (e.key === "r") {
+        e.preventDefault();
+        document.getElementById("inbox-draft")?.focus();
+      } else if (e.key === "e") {
+        e.preventDefault();
+        if (cur) handleNotInterested(cur.id);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectLead, handleNotInterested]);
+
   return (
     <div className="flex h-[calc(100vh-48px)] -m-6 overflow-hidden">
       {/* ── LIST PANEL ── */}
@@ -223,7 +261,7 @@ export default function InboxPage() {
         </div>
 
         {/* List body */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto min-h-0">
           {loading &&
             [...Array(4)].map((_, i) => (
               <div
@@ -264,6 +302,16 @@ export default function InboxPage() {
                 ))}
               </div>
             ))}
+        </div>
+
+        {/* Keyboard hint footer */}
+        <div className="shrink-0 border-t border-border px-4.5 py-2 flex items-center gap-3 flex-wrap">
+          {([ ["J", "next"], ["K", "prev"], ["R", "reply"], ["E", "archive"] ] as const).map(([key, hint]) => (
+            <span key={key} className="flex items-center gap-1 font-mono text-[10px] text-fg-5">
+              <Kbd>{key}</Kbd>
+              <span>{hint}</span>
+            </span>
+          ))}
         </div>
       </div>
 
