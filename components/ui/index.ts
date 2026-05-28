@@ -1,6 +1,6 @@
 export { Icon, GoogleIcon, type IconName } from "./icon";
 export { Button, type ButtonProps } from "./button";
-export { Badge, StateBadge, type BadgeProps, type LeadState } from "./badge";
+export { Badge, StateBadge, CategoryBadge, type BadgeProps, type LeadState, type LeadCategory } from "./badge";
 export { Card, CardHeader, CardBody } from "./card";
 export { Input, Textarea, Select, Toggle, Label } from "./input";
 export { Sparkline } from "./sparkline";

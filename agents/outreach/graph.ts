@@ -10,6 +10,7 @@ type Lead = {
   email: string | null;
   website: string | null;
   description: string | null;
+  category: string | null;
   state: string;
 };
 
@@ -17,6 +18,8 @@ type Campaign = {
   id: string;
   name: string;
   offerText: string;
+  websiteOffer: string | null;
+  crmOffer: string | null;
 };
 
 type EmailDraft = {

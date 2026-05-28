@@ -20,6 +20,8 @@ export default function EditCampaignPage() {
           query: data.query ?? "",
           location: data.location ?? "",
           offerText: data.offerText ?? "",
+          websiteOffer: data.websiteOffer ?? "",
+          crmOffer: data.crmOffer ?? "",
           status: data.status ?? "active",
         });
       })

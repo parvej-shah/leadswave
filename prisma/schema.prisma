@@ -9,15 +9,20 @@ datasource db {
 }
 
 model Campaign {
-  id        String    @id @default(cuid())
-  name      String
-  query     String
-  location  String
-  offerText String
-  status    String    @default("active") // active | paused | completed
-  leads     Lead[]
-  createdAt DateTime  @default(now())
-  deletedAt DateTime?
+  id             String    @id @default(cuid())
+  name           String
+  query          String
+  location       String
+  offerText      String
+  country        String?
+  selectedCities String[]  @default([])
+  businessType   String?
+  websiteOffer   String?
+  crmOffer       String?
+  status         String    @default("active") // active | paused | completed
+  leads          Lead[]
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime?
 }
 
 model Lead {
@@ -27,6 +32,12 @@ model Lead {
   website       String?
   email         String?
   description   String?
+  category      String?   // website_proposal | crm
+  address       String?
+  phone         String?
+  rating        Float?
+  mapsUrl       String?
+  placeId       String?
   state          String    @default("discovered")
   lastTouchedAt  DateTime?
   messages       Message[]
@@ -35,6 +46,8 @@ model Lead {
   campaign      Campaign  @relation(fields: [campaignId], references: [id])
   createdAt     DateTime  @default(now())
   deletedAt     DateTime?
+
+  @@unique([campaignId, placeId])
 }
 
 model Message {
@@ -66,6 +79,7 @@ model Settings {
   resendApiKey         String?
   firecrawlApiKey      String?
   anthropicApiKey      String?
+  googleMapsApiKey     String?
   telegramChatId       String?
   googleClientId       String?
   googleClientSecret   String?

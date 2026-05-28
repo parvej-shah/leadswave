@@ -26,11 +26,13 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
 
   const { id } = await ctx.params;
   const body = await req.json();
-  const { name, query, location, offerText, status } = body as {
+  const { name, query, location, offerText, websiteOffer, crmOffer, status } = body as {
     name?: string;
     query?: string;
     location?: string;
     offerText?: string;
+    websiteOffer?: string;
+    crmOffer?: string;
     status?: string;
   };
 
@@ -45,6 +47,8 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
     query?: string;
     location?: string;
     offerText?: string;
+    websiteOffer?: string;
+    crmOffer?: string;
     status?: string;
   } = {};
 
@@ -52,6 +56,8 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
   if (typeof query === "string") data.query = query.trim();
   if (typeof location === "string") data.location = location.trim();
   if (typeof offerText === "string") data.offerText = offerText.trim();
+  if (typeof websiteOffer === "string") data.websiteOffer = websiteOffer.trim();
+  if (typeof crmOffer === "string") data.crmOffer = crmOffer.trim();
   if (typeof status === "string" && ["active", "paused", "completed"].includes(status)) {
     data.status = status;
   }

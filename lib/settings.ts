@@ -9,6 +9,7 @@ export type SystemSettings = {
   resendApiKey: string;
   firecrawlApiKey: string;
   anthropicApiKey: string;
+  googleMapsApiKey: string;
   telegramChatId: string;
   googleClientId: string;
   googleClientSecret: string;
@@ -32,6 +33,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     resendApiKey: dbSettings?.resendApiKey || process.env.RESEND_API_KEY || "",
     firecrawlApiKey: dbSettings?.firecrawlApiKey || process.env.FIRECRAWL_API_KEY || "",
     anthropicApiKey: dbSettings?.anthropicApiKey || process.env.ANTHROPIC_API_KEY || "",
+    googleMapsApiKey: dbSettings?.googleMapsApiKey || process.env.GOOGLE_MAPS_API_KEY || "",
     telegramChatId: dbSettings?.telegramChatId || process.env.TELEGRAM_CHAT_ID || "",
     googleClientId: dbSettings?.googleClientId || process.env.GOOGLE_CLIENT_ID || "",
     googleClientSecret: dbSettings?.googleClientSecret || process.env.GOOGLE_CLIENT_SECRET || "",

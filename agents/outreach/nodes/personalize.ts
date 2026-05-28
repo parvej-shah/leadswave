@@ -1,14 +1,17 @@
 import { generateText } from "@/lib/gemini";
 import { OutreachState } from "../graph";
+import { resolveOffer } from "../lib/offer";
 
 export async function personalizeNode(state: OutreachState): Promise<Partial<OutreachState>> {
+  const { offer, angle } = resolveOffer(state.lead.category, state.campaign);
+
   const prompt = `You are writing a cold outreach email on behalf of ${state.fromName || "our team"}.
 
 About the recipient company:
 ${state.websiteSummary || state.lead.description || `Company: ${state.lead.companyName}`}
-
+${angle ? `\nPitch angle: ${angle}\n` : ""}
 Our offer:
-${state.campaign.offerText}
+${offer}
 
 Write a short, personalized cold email. Rules:
 - Subject line: concise, no clickbait, references something specific about their business

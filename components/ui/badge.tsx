@@ -68,3 +68,29 @@ export function StateBadge({
     </Badge>
   );
 }
+
+export type LeadCategory = "website_proposal" | "crm";
+
+const CATEGORY_MAP: Record<
+  LeadCategory,
+  { variant: BadgeProps["variant"]; label: string }
+> = {
+  website_proposal: { variant: "info", label: "WEBSITE" },
+  crm: { variant: "warm", label: "CRM" },
+};
+
+export function CategoryBadge({
+  category,
+  size,
+}: {
+  category: LeadCategory | string | null;
+  size?: BadgeProps["size"];
+}) {
+  const entry = CATEGORY_MAP[category as LeadCategory];
+  if (!entry) return null;
+  return (
+    <Badge variant={entry.variant} size={size}>
+      {entry.label}
+    </Badge>
+  );
+}

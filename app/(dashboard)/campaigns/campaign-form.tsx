@@ -9,6 +9,8 @@ export type CampaignFormValues = {
   query: string;
   location: string;
   offerText: string;
+  websiteOffer: string;
+  crmOffer: string;
   status: string;
 };
 
@@ -50,6 +52,8 @@ export function CampaignForm({
     query: initial?.query ?? "",
     location: initial?.location ?? "",
     offerText: initial?.offerText ?? "",
+    websiteOffer: initial?.websiteOffer ?? "",
+    crmOffer: initial?.crmOffer ?? "",
     status: initial?.status ?? "active",
   });
   const [keywords, setKeywords] = useState("");
@@ -208,6 +212,29 @@ export function CampaignForm({
             <option value="paused">paused</option>
             <option value="completed">completed</option>
           </Select>
+        )}
+
+        {mode === "edit" && (
+          <>
+            <Textarea
+              label="Website-proposal offer"
+              rows={3}
+              placeholder="Pitch for leads with no website (sell a website build)."
+              value={form.websiteOffer}
+              onChange={setField("websiteOffer")}
+              disabled={disabled}
+              hint="Used for leads tagged website_proposal."
+            />
+            <Textarea
+              label="CRM offer"
+              rows={3}
+              placeholder="Pitch for leads that already have a website (sell CRM)."
+              value={form.crmOffer}
+              onChange={setField("crmOffer")}
+              disabled={disabled}
+              hint="Used for leads tagged crm."
+            />
+          </>
         )}
 
         <div>

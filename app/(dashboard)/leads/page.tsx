@@ -6,6 +6,7 @@ import {
   Avatar,
   Badge,
   Button,
+  CategoryBadge,
   Dialog,
   EmptyState,
   FilterChip,
@@ -25,10 +26,20 @@ type Lead = {
   email: string | null;
   website: string | null;
   state: string;
+  category: string | null;
+  phone: string | null;
+  address: string | null;
   createdAt: string;
   updatedAt?: string;
   campaign: { name: string };
   _count: { messages: number };
+};
+
+type CategoryFilter = "all" | "crm" | "website_proposal";
+
+const CATEGORY_LABEL: Record<"crm" | "website_proposal", string> = {
+  crm: "CRM",
+  website_proposal: "Website",
 };
 
 const STATE_KEYS: LeadState[] = [
@@ -76,6 +87,7 @@ export default function LeadsPage() {
   const [loading, setLoading] = useState(true);
   const [campaignFilter, setCampaignFilter] = useState("all");
   const [stateFilter, setStateFilter] = useState<"all" | LeadState>("all");
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [removing, setRemoving] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
@@ -98,6 +110,12 @@ export default function LeadsPage() {
   const [updateError, setUpdateError] = useState<string | null>(null);
 
   const [deletingLead, setDeletingLead] = useState<Lead | null>(null);
+
+  const [scriptLead, setScriptLead] = useState<Lead | null>(null);
+  const [script, setScript] = useState("");
+  const [scriptLoading, setScriptLoading] = useState(false);
+  const [scriptError, setScriptError] = useState("");
+  const [scriptCopied, setScriptCopied] = useState(false);
 
   const fetchLeads = useCallback(() => {
     setLoading(true);
@@ -123,6 +141,7 @@ export default function LeadsPage() {
     const list = leads.filter((l) => {
       if (campaignFilter !== "all" && l.campaign.name !== campaignFilter) return false;
       if (stateFilter !== "all" && l.state !== stateFilter) return false;
+      if (categoryFilter !== "all" && l.category !== categoryFilter) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchCompany = l.companyName?.toLowerCase().includes(q);
@@ -162,9 +181,12 @@ export default function LeadsPage() {
       return 0;
     });
     return sorted;
-  }, [leads, campaignFilter, stateFilter, searchQuery, sort]);
+  }, [leads, campaignFilter, stateFilter, categoryFilter, searchQuery, sort]);
 
   const stateCount = (s: LeadState) => leads.filter((l) => l.state === s).length;
+  const categoryCount = (c: "crm" | "website_proposal") =>
+    leads.filter((l) => l.category === c).length;
+  const hasCategories = useMemo(() => leads.some((l) => l.category), [leads]);
 
   function toggle(id: string) {
     setSelection((s) => {
@@ -206,6 +228,42 @@ export default function LeadsPage() {
             : l
         )
       );
+    }
+  }
+
+  async function openScript(lead: Lead) {
+    setScriptLead(lead);
+    setScript("");
+    setScriptError("");
+    setScriptCopied(false);
+    setScriptLoading(true);
+    try {
+      const res = await fetch("/api/leads/call-script", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId: lead.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setScriptError(data.error ?? "Failed to generate call script");
+        return;
+      }
+      setScript(data.script ?? "");
+    } catch {
+      setScriptError("Failed to generate call script");
+    } finally {
+      setScriptLoading(false);
+    }
+  }
+
+  async function copyScript() {
+    if (!script) return;
+    try {
+      await navigator.clipboard.writeText(script);
+      setScriptCopied(true);
+      setTimeout(() => setScriptCopied(false), 1500);
+    } catch {
+      // clipboard unavailable
     }
   }
 
@@ -312,6 +370,29 @@ export default function LeadsPage() {
               count={stateCount(s)}
             >
               {s}
+            </FilterChip>
+          ))}
+        </div>
+      )}
+
+      {/* Category filter chips */}
+      {!loading && hasCategories && (
+        <div className="flex flex-wrap gap-1.5 -mt-2">
+          <FilterChip
+            active={categoryFilter === "all"}
+            onClick={() => setCategoryFilter("all")}
+            count={leads.length}
+          >
+            All types
+          </FilterChip>
+          {(["crm", "website_proposal"] as const).map((c) => (
+            <FilterChip
+              key={c}
+              active={categoryFilter === c}
+              onClick={() => setCategoryFilter(c)}
+              count={categoryCount(c)}
+            >
+              {CATEGORY_LABEL[c]}
             </FilterChip>
           ))}
         </div>
@@ -436,6 +517,7 @@ export default function LeadsPage() {
                 }}
                 onDelete={() => setDeletingLead(lead)}
                 onSend={() => handleSend(lead.id)}
+                onScript={() => openScript(lead)}
                 sending={sending === lead.id}
                 removing={removing === lead.id}
                 sendError={sendError?.id === lead.id ? sendError.msg : null}
@@ -543,6 +625,56 @@ export default function LeadsPage() {
           </div>
         )}
       </Dialog>
+
+      {/* Call Script Modal (phone-only leads with no email) */}
+      <Dialog
+        open={scriptLead !== null}
+        onClose={() => setScriptLead(null)}
+        title="Phone call script"
+        width={460}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setScriptLead(null)}>
+              Close
+            </Button>
+            <Button onClick={copyScript} disabled={!script || scriptLoading}>
+              {scriptCopied ? "Copied" : "Copy script"}
+            </Button>
+          </>
+        }
+      >
+        {scriptLead && (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-sans text-[13px] text-fg-1 font-medium">
+                {scriptLead.companyName}
+              </span>
+              {scriptLead.phone && (
+                <a
+                  href={`tel:${scriptLead.phone}`}
+                  className="font-mono text-[12px] text-amber hover:underline"
+                >
+                  {scriptLead.phone}
+                </a>
+              )}
+            </div>
+            {scriptLead.address && (
+              <p className="font-mono text-[11px] text-fg-4 m-0">{scriptLead.address}</p>
+            )}
+            {scriptError ? (
+              <Toast kind="hot" pill="ERROR">
+                {scriptError}
+              </Toast>
+            ) : scriptLoading ? (
+              <p className="font-mono text-[12px] text-fg-4 m-0">generating script…</p>
+            ) : (
+              <p className="font-mono text-[12px] text-fg-2 leading-relaxed whitespace-pre-wrap bg-[oklch(0.13_0_0)] p-3 rounded border border-border-soft m-0">
+                {script}
+              </p>
+            )}
+          </div>
+        )}
+      </Dialog>
     </div>
   );
 }
@@ -619,6 +751,7 @@ function LeadRow({
   onEdit,
   onDelete,
   onSend,
+  onScript,
   sending,
   removing,
   sendError,
@@ -633,6 +766,7 @@ function LeadRow({
   onEdit: () => void;
   onDelete: () => void;
   onSend: () => void;
+  onScript: () => void;
   sending: boolean;
   removing: boolean;
   sendError: string | null;
@@ -650,6 +784,9 @@ function LeadRow({
         : "oklch(0.18 0 0)";
   const alreadySent = SENT_STATES.has(lead.state);
   const lastTouched = relativeTime(lead.updatedAt ?? lead.createdAt);
+  const phoneOnly = !lead.email && !!lead.phone;
+  const subtitle =
+    lead.email || lead.phone || (lead.website ? truncateUrl(lead.website) : "");
 
   return (
     <div
@@ -667,15 +804,18 @@ function LeadRow({
       <div className={`px-3 ${rowPad} flex items-center gap-2.5 min-w-0`}>
         <Avatar name={lead.companyName} size={22} />
         <div className="min-w-0 flex-1">
-          <p
-            className="font-sans text-[13px] text-fg-1 m-0 leading-tight font-medium tracking-[-0.01em] truncate"
-            title={lead.companyName}
-          >
-            {lead.companyName}
-          </p>
-          {density !== "compact" && (lead.email || lead.website) && (
+          <div className="flex items-center gap-1.5 min-w-0">
+            <p
+              className="font-sans text-[13px] text-fg-1 m-0 leading-tight font-medium tracking-[-0.01em] truncate"
+              title={lead.companyName}
+            >
+              {lead.companyName}
+            </p>
+            <CategoryBadge category={lead.category} size="sm" />
+          </div>
+          {density !== "compact" && subtitle && (
             <p className="font-mono text-[10.5px] text-fg-4 m-0 mt-px truncate">
-              {lead.email || (lead.website ? truncateUrl(lead.website) : "")}
+              {subtitle}
             </p>
           )}
         </div>
@@ -722,21 +862,30 @@ function LeadRow({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-100">
-          <Button
-            size="sm"
-            variant="tinted"
-            onClick={onSend}
-            disabled={sending || alreadySent || !lead.email}
-            title={
-              !lead.email
-                ? "No email address"
-                : alreadySent
-                  ? `Already ${lead.state}`
-                  : "Send personalized email"
-            }
-          >
-            {sending ? "…" : "Send"}
-          </Button>
+          {lead.email ? (
+            <Button
+              size="sm"
+              variant="tinted"
+              onClick={onSend}
+              disabled={sending || alreadySent}
+              title={alreadySent ? `Already ${lead.state}` : "Send personalized email"}
+            >
+              {sending ? "…" : "Send"}
+            </Button>
+          ) : phoneOnly ? (
+            <Button
+              size="sm"
+              variant="tinted"
+              onClick={onScript}
+              title="No email — generate a phone call script"
+            >
+              Script
+            </Button>
+          ) : (
+            <Button size="sm" variant="tinted" disabled title="No contact info">
+              Send
+            </Button>
+          )}
           <button
             type="button"
             onClick={onEdit}

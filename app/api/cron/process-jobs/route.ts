@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { Resend } from "resend";
 import { generateText } from "@/lib/gemini";
+import { resolveOffer } from "@/agents/outreach/lib/offer";
 
 // Protect with a shared secret so only Vercel Cron (or your own trigger) can hit this
 function isAuthorized(req: NextRequest): boolean {
@@ -129,9 +130,11 @@ export async function POST(req: NextRequest) {
       .map((m) => m.body)
       .join("\n\n---\n\n");
 
+    const { offer, angle } = resolveOffer(lead.category, lead.campaign);
+
     const prompt = `You are following up on a cold outreach email (follow-up #${followupNum}).
 Company: ${lead.companyName}
-Offer: ${lead.campaign.offerText}
+${angle ? `Pitch angle: ${angle}\n` : ""}Offer: ${offer}
 Prior outbound emails:
 ${priorContext}
 
@@ -142,7 +145,7 @@ Return plain text only — no greeting, no sign-off.`;
     try {
       body = (await generateText(prompt)).trim();
     } catch {
-      body = `Just wanted to follow up on my previous message about ${lead.campaign.offerText.slice(0, 60)}. Would love to connect for a quick call.`;
+      body = `Just wanted to follow up on my previous message about ${offer.slice(0, 60)}. Would love to connect for a quick call.`;
     }
 
     const fullBody = `${body}\n\n— ${settings.fromName || "The team"}`;
