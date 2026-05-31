@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Avatar, Icon, Kbd, type IconName } from "@/components/ui";
+import { Avatar, Button, Dialog, Icon, Kbd, type IconName } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -47,6 +47,8 @@ export function Sidebar({ userEmail, userName, campaigns, inboxHotCount }: Sideb
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [signOutDialogOpen, setSignOutDialogOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const gPending = useRef(false);
   const gTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -100,6 +102,15 @@ export function Sidebar({ userEmail, userName, campaigns, inboxHotCount }: Sideb
     });
   }
 
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await signOut({ callbackUrl: "/login" });
+    } finally {
+      setSigningOut(false);
+    }
+  }
+
   // Avoid hydration mismatch: server renders expanded, client may collapse on mount.
   const c = mounted ? collapsed : false;
 
@@ -140,11 +151,11 @@ export function Sidebar({ userEmail, userName, campaigns, inboxHotCount }: Sideb
         )}
       </nav>
 
-      <div className="border-t border-border pt-2.5">
+      <div className="border-t border-border pt-2.5 relative">
         {!c ? (
           <button
             type="button"
-            onClick={() => signOut({ callbackUrl: "/login" })}
+            onClick={() => setSignOutDialogOpen(true)}
             className="w-full flex items-center gap-2 px-1 py-1.5 rounded cursor-pointer hover:bg-[oklch(0.13_0_0)] transition-colors duration-150 group"
             title="Sign out"
           >
@@ -177,6 +188,33 @@ export function Sidebar({ userEmail, userName, campaigns, inboxHotCount }: Sideb
           {!c && <span className="tracking-[0.04em]">Collapse</span>}
         </button>
       </div>
+
+      <Dialog
+        open={signOutDialogOpen}
+        onClose={() => !signingOut && setSignOutDialogOpen(false)}
+        title="Sign out"
+        dotColor="var(--amber)"
+        width={420}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setSignOutDialogOpen(false)} disabled={signingOut}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleSignOut} disabled={signingOut}>
+              {signingOut ? "Signing out..." : "Sign out"}
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          <p className="font-mono text-[12px] text-fg-2 leading-relaxed m-0">
+            You are about to end this session.
+          </p>
+          <p className="font-mono text-[11px] text-fg-4 leading-relaxed bg-[oklch(0.13_0_0)] p-2.5 rounded border border-border-soft m-0">
+            You can sign back in anytime with your account.
+          </p>
+        </div>
+      </Dialog>
     </aside>
   );
 }

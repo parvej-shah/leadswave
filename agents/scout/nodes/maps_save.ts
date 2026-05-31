@@ -17,6 +17,7 @@ export async function mapsSaveNode(state: MapsScoutState): Promise<Partial<MapsS
       rating: l.rating,
       mapsUrl: l.mapsUrl,
       placeId: l.placeId,
+      score: l.score,
       state: "discovered",
     })),
     skipDuplicates: true,

@@ -23,6 +23,7 @@ type Settings = {
   resendApiKey: string;
   firecrawlApiKey: string;
   anthropicApiKey: string;
+  googleMapsApiKey: string;
   telegramChatId: string;
   googleClientId: string;
   googleClientSecret: string;
@@ -54,6 +55,7 @@ const DEFAULTS: Settings = {
   resendApiKey: "",
   firecrawlApiKey: "",
   anthropicApiKey: "",
+  googleMapsApiKey: "",
   telegramChatId: "",
   googleClientId: "",
   googleClientSecret: "",
@@ -312,6 +314,12 @@ export default function SettingsPage() {
                 placeholder="sk-ant-••••••••••••••••••••••••••••••"
                 value={form.anthropicApiKey}
                 onChange={(v) => set("anthropicApiKey", v)}
+              />
+              <SecretInput
+                label="Google Maps API key"
+                placeholder="AIza••••••••••••••••••••••••••••••••••"
+                value={form.googleMapsApiKey}
+                onChange={(v) => set("googleMapsApiKey", v)}
               />
             </CardBody>
           </Card>

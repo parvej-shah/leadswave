@@ -38,6 +38,7 @@ model Lead {
   rating        Float?
   mapsUrl       String?
   placeId       String?
+  score         Int       @default(0)
   state          String    @default("discovered")
   lastTouchedAt  DateTime?
   messages       Message[]

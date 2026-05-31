@@ -1,8 +1,6 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Badge, Button, Icon, Sparkline } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
@@ -33,9 +31,6 @@ const statusDot = {
 } as const;
 
 export function CampaignRow({ c }: { c: CampaignRowData }) {
-  const router = useRouter();
-  const [running, setRunning] = useState(false);
-  const [message, setMessage] = useState<string>("");
 
   const replyRate = c.sent > 0 ? (c.replies / c.sent) * 100 : 0;
   const isHealthy = replyRate > 10;
@@ -45,30 +40,7 @@ export function CampaignRow({ c }: { c: CampaignRowData }) {
     Math.max(0, (c.leads * (i + 1)) / 7 + Math.sin(i + seed) * Math.max(c.leads / 4, 4))
   );
 
-  async function rerunScout() {
-    setMessage("");
-    setRunning(true);
-    try {
-      const res = await fetch("/api/agents/scout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ campaignId: c.id }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setMessage(data.error ?? "Scout failed");
-        return;
-      }
-      setMessage(`Scout complete. ${data.savedCount ?? 0} leads saved.`);
-      router.refresh();
-    } catch {
-      setMessage("Scout failed");
-    } finally {
-      setRunning(false);
-    }
-  }
-
-  const variant = (statusVariant as Record<string, "success" | "neutral">)[c.status] ?? "neutral";
+const variant = (statusVariant as Record<string, "success" | "neutral">)[c.status] ?? "neutral";
   const dotColor = (statusDot as Record<string, string>)[c.status] ?? "var(--fg-5)";
 
   return (
@@ -144,15 +116,11 @@ export function CampaignRow({ c }: { c: CampaignRowData }) {
 
       {/* Actions */}
       <div className="flex gap-1.5 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity duration-150">
-        <Button
-          size="sm"
-          variant="secondary"
-          iconStart="refresh"
-          disabled={running}
-          onClick={rerunScout}
-        >
-          {running ? "Scouting…" : "Re-scout"}
-        </Button>
+        <Link href={`/campaigns/${c.id}/scout`}>
+          <Button size="sm" variant="secondary" iconStart="refresh">
+            Re-scout
+          </Button>
+        </Link>
         <Link href={`/campaigns/${c.id}/edit`}>
           <Button size="sm" variant="ghost" iconStart="pencil">
             Edit
@@ -172,11 +140,6 @@ export function CampaignRow({ c }: { c: CampaignRowData }) {
         </button>
       </div>
 
-      {message && (
-        <p className="absolute right-4 -bottom-5 font-mono text-[11px] text-fg-4 m-0">
-          {message}
-        </p>
-      )}
     </div>
   );
 }

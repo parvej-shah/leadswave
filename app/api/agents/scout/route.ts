@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
       campaignId: campaign.id,
       googleMapsApiKey: settings.googleMapsApiKey,
       firecrawlApiKey: settings.firecrawlApiKey ?? "",
+      maxPerCity: 60,
     });
 
     return NextResponse.json({ ok: true, savedCount: result.savedCount });

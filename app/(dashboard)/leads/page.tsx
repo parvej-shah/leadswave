@@ -312,7 +312,7 @@ export default function LeadsPage() {
   }
 
   const rowPad = density === "compact" ? "py-[7px]" : "py-[11px]";
-  const gridCols = "36px 2fr 1.6fr 1.4fr 110px 120px 56px 110px";
+  const gridCols = "36px 2fr 1.4fr 1.2fr 1.1fr 110px 120px 56px 110px";
 
   return (
     <div className="flex flex-col gap-5">
@@ -477,6 +477,7 @@ export default function LeadsPage() {
             </div>
             <SortHeader label="Company" sortKey="company" sort={sort} onClick={toggleSort} />
             <SortHeader label="Campaign" sortKey="campaign" sort={sort} onClick={toggleSort} />
+            <SortHeader label="Website" />
             <SortHeader
               label="Last touched"
               sortKey="lastTouched"
@@ -826,6 +827,25 @@ function LeadRow({
         className={`px-3 ${rowPad} font-mono text-[11px] text-fg-3 flex items-center min-w-0 truncate`}
       >
         {lead.campaign.name}
+      </div>
+
+      {/* Website */}
+      <div className={`px-3 ${rowPad} flex items-center min-w-0`}>
+        {lead.website ? (
+          <a
+            href={lead.website}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="font-mono text-[11px] text-info hover:text-fg-1 transition-colors truncate flex items-center gap-1 min-w-0"
+            title={lead.website}
+          >
+            <span className="truncate">{truncateUrl(lead.website)}</span>
+            <Icon name="arrow" size={9} className="shrink-0" />
+          </a>
+        ) : (
+          <span className="font-mono text-[11px] text-fg-5">—</span>
+        )}
       </div>
 
       {/* Last touched */}

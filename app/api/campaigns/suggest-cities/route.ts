@@ -23,10 +23,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "businessType and country are required" }, { status: 400 });
   }
 
-  const prompt = `You are a market analyst. For the business type "${businessType}" in ${country}, rank the top 8 cities by market opportunity (business density and local spending power).
-Return JSON only, no prose, no markdown:
-{ "cities": [ { "city": "string", "reason": "short phrase", "score": 0 } ] }
-score is an integer 1-100 (higher = better opportunity), cities ordered best first.`;
+  const prompt = `You are a business intelligence analyst specializing in geographic market data.
+
+Task: For the business type "${businessType}" in ${country}, identify the 15 cities with the HIGHEST ABSOLUTE NUMBER of "${businessType}" businesses physically present and operating.
+
+Ranking criteria (in order of priority):
+1. Raw count of "${businessType}" businesses registered/operating in the city
+2. Commercial district density — cities with concentrated business hubs rank higher
+3. Population size as a secondary proxy only when business count data is uncertain
+
+Do NOT rank by economic opportunity, GDP, spending power, or growth potential. Rank strictly by where the most "${businessType}" businesses exist today.
+
+Use your knowledge of ${country}'s geography, major commercial centers, and where this specific business type clusters. For example:
+- Pharmacies cluster near hospitals and densely populated residential areas
+- Marketing agencies cluster in tech/media/startup hubs
+- Law firms cluster in capital cities and financial/commercial districts
+- Restaurants cluster in tourism and high foot-traffic areas
+
+Return JSON only, no prose, no markdown fences:
+{"cities":[{"city":"string","reason":"one short phrase explaining why this city has many of these businesses","score":0}]}
+
+score = estimated density rank normalized to 1–100 (100 = city with the most businesses of this type, others relative to it). Order cities best-first.`;
+
 
   try {
     const text = await generateText(prompt);

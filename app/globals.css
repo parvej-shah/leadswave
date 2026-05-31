@@ -261,3 +261,26 @@
 .ds-pulse { animation: ds-pulse 1.4s ease-in-out infinite; }
 .ds-fade-in { animation: ds-fade-in 200ms ease-out; }
 .ds-scale-up { animation: ds-scale-up 200ms ease-out; }
+
+/* ============================================================
+   Scrollbars — slim, themed
+   ============================================================ */
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(0.30 0 0);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.72 0.15 85);
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.30 0 0) transparent;
+}
