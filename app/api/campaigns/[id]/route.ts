@@ -26,7 +26,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
 
   const { id } = await ctx.params;
   const body = await req.json();
-  const { name, query, location, offerText, websiteOffer, crmOffer, status } = body as {
+  const { name, query, location, offerText, websiteOffer, crmOffer, status, businessType, country } = body as {
     name?: string;
     query?: string;
     location?: string;
@@ -34,6 +34,8 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
     websiteOffer?: string;
     crmOffer?: string;
     status?: string;
+    businessType?: string;
+    country?: string;
   };
 
   const existing = await db.campaign.findFirst({
@@ -50,6 +52,8 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
     websiteOffer?: string;
     crmOffer?: string;
     status?: string;
+    businessType?: string;
+    country?: string;
   } = {};
 
   if (typeof name === "string") data.name = name.trim();
@@ -58,6 +62,8 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
   if (typeof offerText === "string") data.offerText = offerText.trim();
   if (typeof websiteOffer === "string") data.websiteOffer = websiteOffer.trim();
   if (typeof crmOffer === "string") data.crmOffer = crmOffer.trim();
+  if (typeof businessType === "string") data.businessType = businessType.trim();
+  if (typeof country === "string") data.country = country.trim();
   if (typeof status === "string" && ["active", "paused", "completed"].includes(status)) {
     data.status = status;
   }

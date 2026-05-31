@@ -29,6 +29,26 @@ export async function mapsEnrichNode(state: MapsScoutState): Promise<Partial<Map
     });
   }
 
+  // CRM leads that still have no email after crawl: fall back to web search.
+  const crmNoEmail = withSite.filter((l) => !byPlaceId.get(l.placeId)?.email);
+  for (let i = 0; i < crmNoEmail.length; i += BATCH) {
+    const batch = crmNoEmail.slice(i, i + BATCH);
+    const results = await Promise.allSettled(
+      batch.map((l) => findContactByWebSearch(firecrawl, l.companyName, l.address ?? state.country))
+    );
+    results.forEach((result, idx) => {
+      if (result.status !== "fulfilled" || !result.value) return;
+      const lead = batch[idx];
+      const current = byPlaceId.get(lead.placeId)!;
+      const found = result.value;
+      byPlaceId.set(lead.placeId, {
+        ...current,
+        email: current.email ?? found.email,
+        description: current.description || found.description,
+      });
+    });
+  }
+
   // No-website (website_proposal) leads: web-search for an email so we can email them.
   const noSite = state.leads.filter((l) => l.category === "website_proposal");
   for (let i = 0; i < noSite.length; i += BATCH) {
