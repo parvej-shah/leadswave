@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Badge, Button, Icon, Sparkline } from "@/components/ui";
+import { Badge, Button, Sparkline } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 export type CampaignRowData = {
@@ -131,13 +131,6 @@ const variant = (statusVariant as Record<string, "success" | "neutral">)[c.statu
             Import
           </Button>
         </Link>
-        <button
-          type="button"
-          title="More"
-          className="bg-transparent border border-[oklch(0.22_0_0)] hover:border-[oklch(0.28_0_0)] text-fg-4 hover:text-fg-2 cursor-pointer px-1.5 py-[5px] rounded-[5px] flex transition-colors duration-150"
-        >
-          <Icon name="chevronDown" size={11} />
-        </button>
       </div>
 
     </div>

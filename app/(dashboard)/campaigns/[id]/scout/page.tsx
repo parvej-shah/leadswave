@@ -6,6 +6,8 @@ import { useParams, useRouter } from "next/navigation";
 import { Button, Toast, CategoryBadge, Icon } from "@/components/ui";
 import { MapsLead } from "@/agents/scout/maps-graph";
 
+type SuggestedCity = { city: string; reason: string; score: number };
+
 const RUNNING_MESSAGES = [
   "Searching Google Maps…",
   "Enriching lead data…",
@@ -38,6 +40,17 @@ function RunningIndicator() {
         <p className="font-mono text-[13px] text-fg-2 m-0">{RUNNING_MESSAGES[msgIdx]}</p>
         <p className="font-mono text-[11px] text-fg-5 m-0 mt-1.5">this can take up to a minute</p>
       </div>
+    </div>
+  );
+}
+
+function ScoreBar({ score }: { score: number }) {
+  return (
+    <div className="mt-1.5 h-1 w-full rounded-full bg-[oklch(0.18_0_0)] overflow-hidden">
+      <div
+        className="h-full rounded-full bg-amber transition-all duration-500"
+        style={{ width: `${Math.min(score, 100)}%` }}
+      />
     </div>
   );
 }
@@ -115,34 +128,99 @@ function LeadRow({ lead, checked, onToggle }: LeadRowProps) {
   );
 }
 
-type ViewPhase = "loading" | "review" | "done" | "error";
+type ViewPhase = "loading-campaign" | "pick-cities" | "loading-cities" | "scouting" | "review" | "done" | "error";
 
 export default function CampaignScoutPage() {
   const params = useParams();
   const router = useRouter();
   const campaignId = params.id as string;
 
-  const [phase, setPhase] = useState<ViewPhase>("loading");
+  const [phase, setPhase] = useState<ViewPhase>("loading-campaign");
+  const [campaign, setCampaign] = useState<{ businessType?: string; country?: string } | null>(null);
+
+  // City picker state
+  const [suggestedCities, setSuggestedCities] = useState<SuggestedCity[]>([]);
+  const [selectedCities, setSelectedCities] = useState<Set<string>>(new Set());
+
+  // Lead review state
   const [leads, setLeads] = useState<MapsLead[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [error, setError] = useState("");
   const [rerunning, setRerunning] = useState(false);
 
+  // Selected cities to use when scouting (either from campaign or picker)
+  const [citiesToScout, setCitiesToScout] = useState<string[] | null>(null);
+
   const allSelected = leads.length > 0 && selected.size === leads.length;
 
-  const runPreview = useCallback(async () => {
+  // Load campaign and decide whether to go straight to scouting or show city picker
+  useEffect(() => {
+    fetch(`/api/campaigns/${campaignId}`)
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error ?? "Failed to load campaign");
+        setCampaign({ businessType: data.businessType, country: data.country });
+        if (data.selectedCities?.length > 0) {
+          // Campaign already has cities — go straight to scouting
+          setCitiesToScout(null); // null means "use campaign's own cities"
+          setPhase("scouting");
+        } else {
+          // No cities — need to pick some first
+          setPhase("loading-cities");
+          fetchCities(data.businessType ?? data.query ?? "", data.country ?? "");
+        }
+      })
+      .catch((err: Error) => {
+        setError(err.message);
+        setPhase("error");
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaignId]);
+
+  async function fetchCities(businessType: string, country: string) {
+    try {
+      const res = await fetch("/api/campaigns/suggest-cities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessType, country }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to suggest cities");
+      setSuggestedCities(data.cities ?? []);
+      setSelectedCities(new Set((data.cities ?? []).map((c: SuggestedCity) => c.city)));
+      setPhase("pick-cities");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to suggest cities");
+      setPhase("error");
+    }
+  }
+
+  function toggleCity(city: string) {
+    setSelectedCities((prev) => {
+      const next = new Set(prev);
+      if (next.has(city)) next.delete(city);
+      else next.add(city);
+      return next;
+    });
+  }
+
+  const runPreview = useCallback(async (cities?: string[]) => {
+    const body: Record<string, unknown> = { campaignId };
+    if (cities) body.cities = cities;
     const res = await fetch("/api/agents/scout/preview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ campaignId }),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Scouting failed");
     return (data.leads ?? []) as MapsLead[];
   }, [campaignId]);
 
+  // Trigger scouting when phase transitions to "scouting"
   useEffect(() => {
-    runPreview()
+    if (phase !== "scouting") return;
+    runPreview(citiesToScout ?? undefined)
       .then((l) => {
         setLeads(l);
         setSelected(new Set(l.map((_, i) => i)));
@@ -152,7 +230,15 @@ export default function CampaignScoutPage() {
         setError(err.message);
         setPhase("error");
       });
-  }, [runPreview]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
+  function launchScout() {
+    if (selectedCities.size === 0) return;
+    const cities = Array.from(selectedCities);
+    setCitiesToScout(cities);
+    setPhase("scouting");
+  }
 
   function toggleLead(i: number) {
     setSelected((prev) => {
@@ -167,7 +253,7 @@ export default function CampaignScoutPage() {
     setRerunning(true);
     setError("");
     try {
-      const l = await runPreview();
+      const l = await runPreview(citiesToScout ?? undefined);
       setLeads(l);
       setSelected(new Set(l.map((_, i) => i)));
     } catch (err) {
@@ -193,34 +279,36 @@ export default function CampaignScoutPage() {
     setTimeout(() => router.push("/campaigns"), 1800);
   }
 
+  const subtitle =
+    phase === "loading-campaign" || phase === "loading-cities" ? "Loading…"
+    : phase === "pick-cities" ? "This campaign has no cities yet — pick cities to scout."
+    : phase === "scouting" ? "Running the scout agent…"
+    : phase === "review" ? "Review and select leads to add. Already-saved leads are excluded."
+    : phase === "done" ? "Leads saved."
+    : "Something went wrong.";
+
   return (
-    <div className="max-w-170 mx-auto px-4 py-8">
+    <div className="max-w-220 mx-auto px-4 py-4">
       <Link
         href="/campaigns"
-        className="font-mono text-[11px] text-fg-4 hover:text-fg-2 inline-flex items-center gap-1.5 mb-6 transition-colors duration-150"
+        className="font-mono text-[11px] text-fg-4 hover:text-fg-2 inline-flex items-center gap-1.5 mb-3 transition-colors duration-150"
       >
         ← Campaigns
       </Link>
 
-      <div className="mb-6">
-        <h1 className="ds-h1 m-0 mb-1">Scout New Leads</h1>
-        <p className="font-mono text-[12px] text-fg-4 m-0">
-          {phase === "loading"
-            ? "Running the scout agent…"
-            : phase === "review"
-            ? "Review and select leads to add. Already-saved leads are excluded."
-            : phase === "done"
-            ? "Leads saved."
-            : "Something went wrong."}
-        </p>
+      <div className="mb-3">
+        <h1 className="ds-h1 m-0 mb-0.5">Scout New Leads</h1>
+        <p className="font-mono text-[12px] text-fg-4 m-0">{subtitle}</p>
       </div>
 
-      {phase === "loading" && (
+      {/* Loading states */}
+      {(phase === "loading-campaign" || phase === "loading-cities" || phase === "scouting") && (
         <div className="bg-surface border border-border rounded-xl">
           <RunningIndicator />
         </div>
       )}
 
+      {/* Error */}
       {phase === "error" && (
         <div className="flex flex-col gap-4">
           <Toast kind="hot" pill="ERROR">{error}</Toast>
@@ -230,6 +318,7 @@ export default function CampaignScoutPage() {
         </div>
       )}
 
+      {/* Done */}
       {phase === "done" && (
         <div className="min-h-[40vh] flex items-center justify-center">
           <div className="text-center">
@@ -245,6 +334,78 @@ export default function CampaignScoutPage() {
         </div>
       )}
 
+      {/* City picker — shown for campaigns with no saved cities */}
+      {phase === "pick-cities" && (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <p className="font-mono text-[12px] text-fg-3 m-0">
+              Top cities for <span className="text-fg-1">{campaign?.businessType}</span> in{" "}
+              <span className="text-fg-1">{campaign?.country}</span>
+            </p>
+            <div className="flex gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedCities(new Set(suggestedCities.map((c) => c.city)))}>
+                Select all
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedCities(new Set())}>
+                Clear
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            {suggestedCities.map((c) => {
+              const active = selectedCities.has(c.city);
+              return (
+                <button
+                  key={c.city}
+                  type="button"
+                  onClick={() => toggleCity(c.city)}
+                  className={[
+                    "text-left rounded-lg border px-4 py-3 transition-colors duration-150 cursor-pointer w-full",
+                    active
+                      ? "bg-amber-bg border-amber-border"
+                      : "bg-[oklch(0.12_0_0)] border-[oklch(0.19_0_0)] hover:border-[oklch(0.26_0_0)]",
+                  ].join(" ")}
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={[
+                        "w-4 h-4 rounded-sm border flex items-center justify-center shrink-0 text-[9px]",
+                        active ? "bg-amber border-amber text-canvas" : "border-[oklch(0.28_0_0)]",
+                      ].join(" ")}
+                    >
+                      {active ? "✓" : ""}
+                    </span>
+                    <span className="font-mono text-[13px] text-fg-1 font-medium flex-1">{c.city}</span>
+                    <span className="font-mono text-[11px] text-fg-4 shrink-0">{c.score}/100</span>
+                  </div>
+                  <ScoreBar score={c.score} />
+                  {c.reason && (
+                    <p className="font-mono text-[11px] text-fg-4 mt-2 ml-7 m-0">{c.reason}</p>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex justify-between items-center mt-2">
+            <Button type="button" variant="ghost" onClick={() => router.push("/campaigns")}>
+              ← Back
+            </Button>
+            <Button
+              type="button"
+              size="lg"
+              iconStart="play"
+              disabled={selectedCities.size === 0}
+              onClick={launchScout}
+            >
+              Scout Leads ({selectedCities.size} {selectedCities.size === 1 ? "city" : "cities"})
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Review */}
       {phase === "review" && (
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
