@@ -77,6 +77,16 @@ function getCandidateUrls(url: string): string[] {
       `${root}/about`,
       `${root}/about-us`,
       `${root}/team`,
+      `${root}/our-team`,
+      `${root}/meet-the-team`,
+      `${root}/staff`,
+      `${root}/people`,
+      `${root}/partners`,
+      `${root}/associates`,
+      `${root}/lawyers`,
+      `${root}/attorneys`,
+      `${root}/enquiry`,
+      `${root}/reach`,
     ];
     return Array.from(new Set(candidates));
   } catch {
@@ -147,40 +157,57 @@ export async function extractFromUrl(firecrawl: FirecrawlApp, url: string, fallb
  * web-search the business name + location and try to pull an email off whatever
  * pages turn up (social profiles, directories, news). Returns the first email found.
  */
+function buildSearchQueries(companyName: string, locationHint: string, website?: string): string[] {
+  const queries: string[] = [];
+  // Domain-scoped search is most precise when we have a website
+  if (website) {
+    try {
+      const host = new URL(website).hostname;
+      queries.push(`site:${host} email contact`);
+    } catch { /* ignore invalid URL */ }
+  }
+  queries.push(`"${companyName}" ${locationHint} contact email`.trim());
+  queries.push(`"${companyName}" email`.trim());
+  return queries;
+}
+
 export async function findContactByWebSearch(
   firecrawl: FirecrawlApp,
   companyName: string,
   locationHint: string,
+  website?: string,
 ): Promise<{ email: string; description: string } | null> {
-  const query = `"${companyName}" ${locationHint} contact email`.trim();
+  const queries = buildSearchQueries(companyName, locationHint, website);
 
-  let result: { data?: Array<{ url?: string; markdown?: string }> };
-  try {
-    result = (await firecrawl.search(query, { limit: 5 })) as typeof result;
-  } catch {
-    return null;
-  }
-
-  const items = result.data ?? [];
-
-  // Fast path: check if search snippets already contain an email
-  for (const item of items) {
-    const snippetEmails = rankEmails(extractEmails(item.markdown ?? ""));
-    if (snippetEmails.length > 0 && item.url && !isBlockedHost(item.url)) {
-      return { email: snippetEmails[0], description: "" };
+  for (const query of queries) {
+    let result: { data?: Array<{ url?: string; markdown?: string }> };
+    try {
+      result = (await firecrawl.search(query, { limit: 5 })) as typeof result;
+    } catch {
+      continue;
     }
-  }
 
-  // Slow path: scrape the top non-blocked pages
-  const urls = items
-    .map((r) => r.url ?? "")
-    .filter((u) => u && !isBlockedHost(u))
-    .slice(0, 3);
+    const items = result.data ?? [];
 
-  for (const url of urls) {
-    const lead = await extractFromUrl(firecrawl, url, "");
-    if (lead?.email) {
-      return { email: lead.email, description: lead.description ?? "" };
+    // Fast path: email already in search snippet
+    for (const item of items) {
+      const snippetEmails = rankEmails(extractEmails(item.markdown ?? ""));
+      if (snippetEmails.length > 0 && item.url && !isBlockedHost(item.url)) {
+        return { email: snippetEmails[0], description: "" };
+      }
+    }
+
+    // Slow path: scrape top non-blocked pages
+    const urls = items
+      .map((r) => r.url ?? "")
+      .filter((u) => u && !isBlockedHost(u))
+      .slice(0, 3);
+
+    for (const url of urls) {
+      const lead = await extractFromUrl(firecrawl, url, "");
+      if (lead?.email) {
+        return { email: lead.email, description: lead.description ?? "" };
+      }
     }
   }
 

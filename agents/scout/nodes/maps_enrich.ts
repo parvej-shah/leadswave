@@ -34,7 +34,7 @@ export async function mapsEnrichNode(state: MapsScoutState): Promise<Partial<Map
   for (let i = 0; i < crmNoEmail.length; i += BATCH) {
     const batch = crmNoEmail.slice(i, i + BATCH);
     const results = await Promise.allSettled(
-      batch.map((l) => findContactByWebSearch(firecrawl, l.companyName, l.address ?? state.country))
+      batch.map((l) => findContactByWebSearch(firecrawl, l.companyName, l.address ?? state.country, l.website ?? undefined))
     );
     results.forEach((result, idx) => {
       if (result.status !== "fulfilled" || !result.value) return;

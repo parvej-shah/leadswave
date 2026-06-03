@@ -35,7 +35,7 @@ export function Dialog({
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 ds-fade-in"
+      className="fixed inset-0 z-200 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 ds-fade-in"
     >
       <div
         onClick={(e) => e.stopPropagation()}
