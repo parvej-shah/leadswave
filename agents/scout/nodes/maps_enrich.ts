@@ -24,6 +24,9 @@ export async function mapsEnrichNode(state: MapsScoutState): Promise<Partial<Map
       byPlaceId.set(lead.placeId, {
         ...lead,
         email: extracted.email ?? lead.email,
+        emailSource: extracted.email ? "scraped" : lead.emailSource,
+        hasContactForm: extracted.hasContactForm ?? lead.hasContactForm,
+        facebookUrl: extracted.facebookUrl ?? lead.facebookUrl,
         description: extracted.description || lead.description,
       });
     });
@@ -44,6 +47,7 @@ export async function mapsEnrichNode(state: MapsScoutState): Promise<Partial<Map
       byPlaceId.set(lead.placeId, {
         ...current,
         email: current.email ?? found.email,
+        emailSource: current.email ? current.emailSource : "web_search",
         description: current.description || found.description,
       });
     });
@@ -63,6 +67,7 @@ export async function mapsEnrichNode(state: MapsScoutState): Promise<Partial<Map
       byPlaceId.set(lead.placeId, {
         ...lead,
         email: lead.email ?? found.email,
+        emailSource: lead.email ? lead.emailSource : "web_search",
         description: lead.description || found.description,
       });
     });

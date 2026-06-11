@@ -23,7 +23,8 @@ export async function PUT(request: NextRequest) {
   const body = await request.json();
   const allowed = [
     "offerText", "fromEmail", "fromName", "telegramChatId",
-    "resendApiKey", "firecrawlApiKey", "anthropicApiKey", "googleMapsApiKey",
+    "resendApiKey", "firecrawlApiKey", "anthropicApiKey", "emailVerifierApiKey",
+    "enrichmentProvider", "enrichmentApiKey", "googleMapsApiKey",
     "calendarId", "dailySendLimit", "perCampaignDailyLimit", "sendThrottleSeconds",
     "autoSendReplies", "googleClientId", "googleClientSecret", "googleRefreshToken",
     "notifyHotOnly", "notifyEmailDigest",

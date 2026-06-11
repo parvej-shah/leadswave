@@ -10,6 +10,7 @@ import {
   Icon,
   Input,
   Label,
+  Select,
   Textarea,
   Toast,
   Toggle,
@@ -23,6 +24,9 @@ type Settings = {
   resendApiKey: string;
   firecrawlApiKey: string;
   anthropicApiKey: string;
+  emailVerifierApiKey: string;
+  enrichmentProvider: string;
+  enrichmentApiKey: string;
   googleMapsApiKey: string;
   telegramChatId: string;
   googleClientId: string;
@@ -55,6 +59,9 @@ const DEFAULTS: Settings = {
   resendApiKey: "",
   firecrawlApiKey: "",
   anthropicApiKey: "",
+  emailVerifierApiKey: "",
+  enrichmentProvider: "hunter",
+  enrichmentApiKey: "",
   googleMapsApiKey: "",
   telegramChatId: "",
   googleClientId: "",
@@ -320,6 +327,26 @@ export default function SettingsPage() {
                 placeholder="AIza••••••••••••••••••••••••••••••••••"
                 value={form.googleMapsApiKey}
                 onChange={(v) => set("googleMapsApiKey", v)}
+              />
+              <SecretInput
+                label="Email verifier API key (MillionVerifier)"
+                placeholder="••••••••••••••••••••••••••••••••"
+                value={form.emailVerifierApiKey}
+                onChange={(v) => set("emailVerifierApiKey", v)}
+              />
+              <Select
+                label="Email enrichment provider"
+                value={form.enrichmentProvider}
+                onChange={(e) => set("enrichmentProvider", e.target.value)}
+              >
+                <option value="hunter">Hunter.io</option>
+                <option value="anymailfinder">Anymailfinder</option>
+              </Select>
+              <SecretInput
+                label="Email enrichment API key"
+                placeholder="••••••••••••••••••••••••••••••••"
+                value={form.enrichmentApiKey}
+                onChange={(v) => set("enrichmentApiKey", v)}
               />
             </CardBody>
           </Card>

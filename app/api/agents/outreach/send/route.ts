@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getSystemSettings } from "@/lib/settings";
 import { Resend } from "resend";
 import { scheduleFollowupsNode } from "@/agents/outreach/nodes/schedule_followups";
+import { verifyEmailAddress } from "@/lib/email/verify";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -26,6 +27,32 @@ export async function POST(req: NextRequest) {
 
   if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
   if (!lead.email) return NextResponse.json({ error: "Lead has no email address" }, { status: 400 });
+  if (lead.emailStatus === "invalid")
+    return NextResponse.json(
+      { error: "Lead email failed verification — sending would bounce and hurt your sender reputation" },
+      { status: 400 },
+    );
+
+  // Lazily verify never-checked emails before the first send: a hard bounce
+  // costs more sender reputation than the one verification credit.
+  if (settings.emailVerifierApiKey && lead.emailStatus !== "verified" && lead.emailStatus !== "catch_all") {
+    const verdict = await verifyEmailAddress(lead.email, settings.emailVerifierApiKey);
+    if (verdict !== "unknown") {
+      await db.lead.update({
+        where: { id: leadId },
+        data: {
+          emailStatus: verdict,
+          emailVerifiedAt: verdict === "invalid" ? null : new Date(),
+        },
+      });
+    }
+    if (verdict === "invalid")
+      return NextResponse.json(
+        { error: "Lead email failed verification — sending would bounce and hurt your sender reputation" },
+        { status: 400 },
+      );
+  }
+
   if (!settings?.resendApiKey)
     return NextResponse.json({ error: "Resend API key not configured in settings" }, { status: 400 });
   if (!settings?.fromEmail)

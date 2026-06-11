@@ -14,11 +14,15 @@ import {
   StateBadge,
   type LeadState,
 } from "@/components/ui";
+import { WhatsAppButton } from "@/components/whatsapp-button";
 
 type Lead = {
   id: string;
   companyName: string;
   email: string | null;
+  emailStatus: string | null;
+  hasContactForm: boolean | null;
+  facebookUrl: string | null;
   website: string | null;
   phone: string | null;
   address: string | null;
@@ -71,6 +75,7 @@ function truncateUrl(href: string): string {
   return s;
 }
 
+
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
 
@@ -82,7 +87,11 @@ export default function CampaignDetailPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: "lastTouched", dir: "desc" });
   const [enriching, setEnriching] = useState(false);
-  const [enrichResult, setEnrichResult] = useState<{ updated: number; total: number } | null>(null);
+  const [enrichResult, setEnrichResult] = useState<{
+    emailsFound: number;
+    channelsFound?: number;
+    total: number;
+  } | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -224,9 +233,11 @@ export default function CampaignDetailPage() {
           <div className="flex items-center gap-2 shrink-0">
             {enrichResult && (
               <span className="font-mono text-[11px] text-fg-3">
-                {enrichResult.updated === 0
+                {enrichResult.emailsFound === 0
                   ? "No new emails found"
-                  : `+${enrichResult.updated} email${enrichResult.updated === 1 ? "" : "s"} found`}
+                  : `+${enrichResult.emailsFound} email${enrichResult.emailsFound === 1 ? "" : "s"} found`}
+                {(enrichResult.channelsFound ?? 0) > 0 &&
+                  ` · +${enrichResult.channelsFound} channel${enrichResult.channelsFound === 1 ? "" : "s"}`}
               </span>
             )}
             <Button
@@ -236,7 +247,7 @@ export default function CampaignDetailPage() {
               onClick={handleReEnrich}
               disabled={enriching}
             >
-              {enriching ? "Finding emails…" : "Find emails"}
+              {enriching ? "Finding emails…" : "Find Emails (Step 2)"}
             </Button>
             <Link href={`/campaigns/${id}/scout`}>
               <Button size="sm" variant="secondary" iconStart="refresh">
@@ -373,9 +384,35 @@ function LeadRow({
         {lead.email ? (
           <p className="font-mono text-[10.5px] text-fg-3 m-0 truncate" title={lead.email}>
             {lead.email}
+            {lead.emailStatus === "verified" && (
+              <span className="text-success" title="Email verified"> ✓</span>
+            )}
+            {lead.emailStatus === "catch_all" && (
+              <span className="text-amber" title="Catch-all domain — medium confidence"> ~</span>
+            )}
           </p>
         ) : lead.phone ? (
-          <p className="font-mono text-[10.5px] text-fg-4 m-0">{lead.phone}</p>
+          <div className="font-mono text-[10.5px] text-fg-4 flex items-center gap-1.5">
+            <span>{lead.phone}</span>
+            <WhatsAppButton
+              leadId={lead.id}
+              phone={lead.phone}
+              companyName={lead.companyName}
+              className="font-mono text-[10.5px] text-success hover:underline bg-transparent border-0 cursor-pointer p-0"
+            />
+          </div>
+        ) : lead.hasContactForm && lead.website ? (
+          <span className="font-mono text-[10.5px] text-info">contact form</span>
+        ) : lead.facebookUrl ? (
+          <a
+            href={lead.facebookUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="font-mono text-[10.5px] text-info hover:underline"
+          >
+            facebook ↗
+          </a>
         ) : (
           <span className="font-mono text-[11px] text-fg-5">—</span>
         )}

@@ -10,7 +10,7 @@ import { MapsScoutState, MapsLead } from "../maps-graph";
 // description/desc  →  5  (enriched — we know what they do)
 // mapsUrl           →  5  (verifiable listing)
 
-function scoreLead(lead: MapsLead): number {
+export function scoreLead(lead: MapsLead): number {
   let score = 0;
 
   if (lead.website) score += 25;

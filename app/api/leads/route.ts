@@ -53,11 +53,27 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Lead ID is required" }, { status: 400 });
     }
 
+    // A manually changed email invalidates stored verification — otherwise a
+    // stale "invalid" status keeps blocking sends to the corrected address.
+    const newEmail = email !== undefined ? (email ? (email as string).trim() : null) : undefined;
+    let emailChanged = false;
+    if (newEmail !== undefined) {
+      const current = await db.lead.findUnique({ where: { id }, select: { email: true } });
+      emailChanged = newEmail !== (current?.email ?? null);
+    }
+
     const updated = await db.lead.update({
       where: { id },
       data: {
         ...(companyName !== undefined ? { companyName } : {}),
-        ...(email !== undefined ? { email: email ? email.trim() : null } : {}),
+        ...(newEmail !== undefined ? { email: newEmail } : {}),
+        ...(emailChanged
+          ? {
+              emailSource: newEmail ? "manual" : null,
+              emailStatus: null,
+              emailVerifiedAt: null,
+            }
+          : {}),
         ...(website !== undefined ? { website: website ? website.trim() : null } : {}),
         ...(state !== undefined ? { state } : {}),
       },

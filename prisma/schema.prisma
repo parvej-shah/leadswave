@@ -31,6 +31,11 @@ model Lead {
   companyName   String
   website       String?
   email         String?
+  emailSource   String?   // scraped | web_search | guessed | enriched | imported | manual
+  emailStatus   String?   // verified | catch_all | unverified | invalid
+  emailVerifiedAt DateTime?
+  hasContactForm Boolean?  // contact form detected on their website
+  facebookUrl   String?   // Facebook page found during scraping
   description   String?
   category      String?   // website_proposal | crm
   address       String?
@@ -80,6 +85,9 @@ model Settings {
   resendApiKey         String?
   firecrawlApiKey      String?
   anthropicApiKey      String?
+  emailVerifierApiKey  String?
+  enrichmentProvider   String?  @default("hunter") // hunter | anymailfinder
+  enrichmentApiKey     String?
   googleMapsApiKey     String?
   telegramChatId       String?
   googleClientId       String?

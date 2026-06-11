@@ -1,14 +1,10 @@
 import { MapsScoutState } from "../maps-graph";
 
-// Drop leads that are clearly dead listings or too low quality to be worth outreaching.
-// A lead must pass ALL of these checks to survive.
+// Drop leads that are clearly dead/fake listings. Step 2 (re-enrich) will find emails
+// even for leads that have no website or phone yet, so we keep them all here.
 function isQualityLead(lead: MapsScoutState["leads"][number]): boolean {
-  // Must have at least one contact method
-  const hasContact = !!(lead.website || lead.phone);
-  if (!hasContact) return false;
-
   // Must have a real name (not just a place ID)
-  if (!lead.companyName || lead.companyName.length < 2) return false;
+  if (!lead.companyName || lead.companyName.trim().length < 2) return false;
 
   // Drop very-low-rated listings (likely closed / fake)
   // Only apply if a rating exists — no rating means not enough reviews, which is fine

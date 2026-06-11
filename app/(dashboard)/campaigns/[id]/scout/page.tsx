@@ -10,8 +10,7 @@ type SuggestedCity = { city: string; reason: string; score: number };
 
 const RUNNING_MESSAGES = [
   "Searching Google Maps…",
-  "Enriching lead data…",
-  "Filtering duplicates…",
+  "Filtering results…",
   "Almost done…",
 ];
 
@@ -128,7 +127,7 @@ function LeadRow({ lead, checked, onToggle }: LeadRowProps) {
   );
 }
 
-type ViewPhase = "loading-campaign" | "pick-cities" | "loading-cities" | "scouting" | "review" | "done" | "error";
+type ViewPhase = "loading-campaign" | "pick-cities" | "loading-cities" | "scouting" | "review" | "done" | "enriching" | "error";
 
 export default function CampaignScoutPage() {
   const params = useParams();
@@ -147,6 +146,8 @@ export default function CampaignScoutPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [error, setError] = useState("");
   const [rerunning, setRerunning] = useState(false);
+  const [savedCount, setSavedCount] = useState(0);
+  const [enrichResult, setEnrichResult] = useState<{ emailsFound: number; total: number } | null>(null);
 
   // Selected cities to use when scouting (either from campaign or picker)
   const [citiesToScout, setCitiesToScout] = useState<string[] | null>(null);
@@ -275,16 +276,33 @@ export default function CampaignScoutPage() {
       setError(data.error ?? "Save failed");
       return;
     }
+    setSavedCount(chosen.length);
     setPhase("done");
-    setTimeout(() => router.push("/campaigns"), 1800);
+  }
+
+  async function runEnrich() {
+    setPhase("enriching");
+    try {
+      const res = await fetch("/api/leads/re-enrich", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campaignId }),
+      });
+      const data = await res.json();
+      setEnrichResult({ emailsFound: data.emailsFound ?? 0, total: data.total ?? 0 });
+    } catch {
+      // best-effort; still navigate on failure
+    }
+    router.push(`/campaigns/${campaignId}`);
   }
 
   const subtitle =
     phase === "loading-campaign" || phase === "loading-cities" ? "Loading…"
     : phase === "pick-cities" ? "This campaign has no cities yet — pick cities to scout."
-    : phase === "scouting" ? "Running the scout agent…"
-    : phase === "review" ? "Review and select leads to add. Already-saved leads are excluded."
-    : phase === "done" ? "Leads saved."
+    : phase === "scouting" ? "Step 1 — collecting leads from Google Maps…"
+    : phase === "review" ? "Review and select leads to save. Already-saved leads are excluded."
+    : phase === "done" ? `${savedCount} leads collected — ready for Step 2.`
+    : phase === "enriching" ? "Step 2 — finding emails…"
     : "Something went wrong.";
 
   return (
@@ -302,7 +320,7 @@ export default function CampaignScoutPage() {
       </div>
 
       {/* Loading states */}
-      {(phase === "loading-campaign" || phase === "loading-cities" || phase === "scouting") && (
+      {(phase === "loading-campaign" || phase === "loading-cities" || phase === "scouting" || phase === "enriching") && (
         <div className="bg-surface border border-border rounded-xl">
           <RunningIndicator />
         </div>
@@ -318,18 +336,28 @@ export default function CampaignScoutPage() {
         </div>
       )}
 
-      {/* Done */}
+      {/* Done — Step 2 prompt */}
       {phase === "done" && (
         <div className="min-h-[40vh] flex items-center justify-center">
-          <div className="text-center">
+          <div className="text-center max-w-sm">
             <div className="w-12 h-12 rounded-full bg-amber-bg border border-amber-border flex items-center justify-center mx-auto mb-4">
               <span className="text-amber text-xl">✓</span>
             </div>
             <p className="font-sans text-[28px] font-semibold tracking-[-0.02em] text-amber m-0 mb-1 tabular-nums">
-              {selected.size}
+              {savedCount}
             </p>
-            <p className="font-mono text-[13px] text-fg-3 m-0">leads saved</p>
-            <p className="font-mono text-[11px] text-fg-5 m-0 mt-4">redirecting…</p>
+            <p className="font-mono text-[13px] text-fg-3 m-0">leads collected</p>
+            <p className="font-mono text-[12px] text-fg-4 m-0 mt-3 mb-6">
+              Step 2 will scrape every lead's website and run targeted web searches to find email addresses.
+            </p>
+            <div className="flex flex-col gap-2 items-center">
+              <Button type="button" size="lg" iconStart="inbox" onClick={runEnrich}>
+                Find Emails (Step 2)
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => router.push(`/campaigns/${campaignId}`)}>
+                Skip for now
+              </Button>
+            </div>
           </div>
         </div>
       )}

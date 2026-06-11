@@ -4,6 +4,8 @@ import { OutreachState } from "../graph";
 
 export async function sendNode(state: OutreachState): Promise<Partial<OutreachState>> {
   if (!state.lead.email) throw new Error(`Lead ${state.leadId} has no email address`);
+  if (state.lead.emailStatus === "invalid")
+    throw new Error(`Lead ${state.leadId} email failed verification — skipping to protect sender reputation`);
   if (!state.resendApiKey) throw new Error("Resend API key not configured in settings");
   if (!state.fromEmail) throw new Error("From email not configured in settings");
 

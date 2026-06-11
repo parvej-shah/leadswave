@@ -14,6 +14,7 @@ import {
   Toast,
   Input,
 } from "@/components/ui";
+import { WhatsAppButton } from "@/components/whatsapp-button";
 
 type Message = {
   id: string;
@@ -27,6 +28,9 @@ type Lead = {
   id: string;
   companyName: string;
   email: string | null;
+  emailStatus: string | null;
+  hasContactForm: boolean | null;
+  facebookUrl: string | null;
   website: string | null;
   phone: string | null;
   address: string | null;
@@ -56,6 +60,7 @@ function relativeTime(iso: string): string {
 function truncateUrl(href: string): string {
   return href.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "").slice(0, 30);
 }
+
 
 export default function LeadDetailPage() {
   const { id: campaignId, leadId } = useParams<{ id: string; leadId: string }>();
@@ -212,7 +217,18 @@ export default function LeadDetailPage() {
 
             <div className="flex items-center gap-4 flex-wrap mt-0.5">
               {lead.email && (
-                <span className="font-mono text-[11px] text-fg-3">{lead.email}</span>
+                <span className="font-mono text-[11px] text-fg-3">
+                  {lead.email}
+                  {lead.emailStatus === "verified" && (
+                    <span className="text-success" title="Email verified — safe to send"> ✓</span>
+                  )}
+                  {lead.emailStatus === "catch_all" && (
+                    <span className="text-amber" title="Catch-all domain — email is a medium-confidence guess"> ~</span>
+                  )}
+                  {lead.emailStatus === "invalid" && (
+                    <span className="text-hot" title="Email failed verification — sending is blocked"> ✕</span>
+                  )}
+                </span>
               )}
               {lead.phone && (
                 <a
@@ -220,6 +236,25 @@ export default function LeadDetailPage() {
                   className="font-mono text-[11px] text-fg-3 hover:text-fg-1 transition-colors"
                 >
                   {lead.phone}
+                </a>
+              )}
+              {lead.phone && (
+                <WhatsAppButton
+                  leadId={lead.id}
+                  phone={lead.phone}
+                  companyName={lead.companyName}
+                  label="WhatsApp"
+                  className="font-mono text-[11px] text-success hover:underline bg-transparent border-0 cursor-pointer p-0"
+                />
+              )}
+              {lead.facebookUrl && (
+                <a
+                  href={lead.facebookUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-[11px] text-info hover:text-fg-1 transition-colors"
+                >
+                  Facebook ↗
                 </a>
               )}
               {lead.website && (
@@ -292,9 +327,55 @@ export default function LeadDetailPage() {
             </div>
 
             {!canSend ? (
-              <p className="font-mono text-[12px] text-fg-4">
-                No email address — cannot send email to this lead.
-              </p>
+              <div className="flex flex-col gap-2">
+                <p className="font-mono text-[12px] text-fg-4 m-0">
+                  No email address — reach this lead through another channel:
+                </p>
+                <div className="flex items-center gap-3 flex-wrap">
+                  {lead.phone && (
+                    <>
+                      <a
+                        href={`tel:${lead.phone}`}
+                        className="font-mono text-[12px] text-amber hover:underline"
+                      >
+                        Call {lead.phone}
+                      </a>
+                      <WhatsAppButton
+                        leadId={lead.id}
+                        phone={lead.phone}
+                        companyName={lead.companyName}
+                        label="WhatsApp"
+                        className="font-mono text-[12px] text-success hover:underline bg-transparent border-0 cursor-pointer p-0"
+                      />
+                    </>
+                  )}
+                  {lead.hasContactForm && lead.website && (
+                    <a
+                      href={lead.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-[12px] text-info hover:underline"
+                    >
+                      Website contact form ↗
+                    </a>
+                  )}
+                  {lead.facebookUrl && (
+                    <a
+                      href={lead.facebookUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-[12px] text-info hover:underline"
+                    >
+                      Facebook page ↗
+                    </a>
+                  )}
+                  {!lead.phone && !lead.hasContactForm && !lead.facebookUrl && (
+                    <span className="font-mono text-[12px] text-fg-5">
+                      No known channels — try re-enriching the campaign.
+                    </span>
+                  )}
+                </div>
+              </div>
             ) : (
               <>
                 <Input

@@ -19,16 +19,20 @@ import {
   Toast,
   type LeadState,
 } from "@/components/ui";
+import { WhatsAppButton } from "@/components/whatsapp-button";
 
 type Lead = {
   id: string;
   companyName: string;
   email: string | null;
+  emailStatus: string | null;
   website: string | null;
   state: string;
   category: string | null;
   phone: string | null;
   address: string | null;
+  hasContactForm: boolean | null;
+  facebookUrl: string | null;
   createdAt: string;
   updatedAt?: string;
   campaign: { name: string };
@@ -36,6 +40,26 @@ type Lead = {
 };
 
 type CategoryFilter = "all" | "crm" | "website_proposal";
+
+// Alternative outreach channels for leads with no email (Layer 4),
+// plus a review queue for medium-confidence catch-all emails.
+type ChannelFilter = "all" | "call_queue" | "form" | "facebook" | "catch_all";
+
+const CHANNEL_LABEL: Record<Exclude<ChannelFilter, "all">, string> = {
+  call_queue: "Call queue",
+  form: "Contact form",
+  facebook: "Facebook",
+  catch_all: "Catch-all ~",
+};
+
+function matchesChannel(l: Lead, c: Exclude<ChannelFilter, "all">): boolean {
+  if (c === "catch_all") return !!l.email && l.emailStatus === "catch_all";
+  if (l.email) return false; // channels are fallbacks for email-less leads
+  if (c === "call_queue") return !!l.phone;
+  if (c === "form") return !!l.hasContactForm;
+  return !!l.facebookUrl;
+}
+
 
 const CATEGORY_LABEL: Record<"crm" | "website_proposal", string> = {
   crm: "CRM",
@@ -88,6 +112,7 @@ export default function LeadsPage() {
   const [campaignFilter, setCampaignFilter] = useState("all");
   const [stateFilter, setStateFilter] = useState<"all" | LeadState>("all");
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
+  const [channelFilter, setChannelFilter] = useState<ChannelFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [removing, setRemoving] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
@@ -142,6 +167,7 @@ export default function LeadsPage() {
       if (campaignFilter !== "all" && l.campaign.name !== campaignFilter) return false;
       if (stateFilter !== "all" && l.state !== stateFilter) return false;
       if (categoryFilter !== "all" && l.category !== categoryFilter) return false;
+      if (channelFilter !== "all" && !matchesChannel(l, channelFilter)) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchCompany = l.companyName?.toLowerCase().includes(q);
@@ -181,12 +207,23 @@ export default function LeadsPage() {
       return 0;
     });
     return sorted;
-  }, [leads, campaignFilter, stateFilter, categoryFilter, searchQuery, sort]);
+  }, [leads, campaignFilter, stateFilter, categoryFilter, channelFilter, searchQuery, sort]);
 
   const stateCount = (s: LeadState) => leads.filter((l) => l.state === s).length;
   const categoryCount = (c: "crm" | "website_proposal") =>
     leads.filter((l) => l.category === c).length;
   const hasCategories = useMemo(() => leads.some((l) => l.category), [leads]);
+  const channelCount = (c: Exclude<ChannelFilter, "all">) =>
+    leads.filter((l) => matchesChannel(l, c)).length;
+  const hasChannelLeads = useMemo(
+    () =>
+      leads.some(
+        (l) =>
+          (!l.email && (l.phone || l.hasContactForm || l.facebookUrl)) ||
+          (l.email && l.emailStatus === "catch_all")
+      ),
+    [leads]
+  );
 
   function toggle(id: string) {
     setSelection((s) => {
@@ -393,6 +430,33 @@ export default function LeadsPage() {
               count={categoryCount(c)}
             >
               {CATEGORY_LABEL[c]}
+            </FilterChip>
+          ))}
+        </div>
+      )}
+
+      {/* Channel filter chips — email-less leads reachable by other means,
+          plus catch-all emails worth reviewing before bulk sends */}
+      {!loading && hasChannelLeads && (
+        <div className="flex flex-wrap gap-1.5 -mt-2 items-center">
+          <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">
+            Channels:
+          </span>
+          <FilterChip
+            active={channelFilter === "all"}
+            onClick={() => setChannelFilter("all")}
+            count={leads.length}
+          >
+            All
+          </FilterChip>
+          {(["call_queue", "form", "facebook", "catch_all"] as const).map((c) => (
+            <FilterChip
+              key={c}
+              active={channelFilter === c}
+              onClick={() => setChannelFilter(channelFilter === c ? "all" : c)}
+              count={channelCount(c)}
+            >
+              {CHANNEL_LABEL[c]}
             </FilterChip>
           ))}
         </div>
@@ -786,8 +850,14 @@ function LeadRow({
   const alreadySent = SENT_STATES.has(lead.state);
   const lastTouched = relativeTime(lead.updatedAt ?? lead.createdAt);
   const phoneOnly = !lead.email && !!lead.phone;
+  const verifyMark =
+    lead.email && lead.emailStatus === "verified" ? " ✓"
+    : lead.email && lead.emailStatus === "catch_all" ? " ~"
+    : "";
   const subtitle =
-    lead.email || lead.phone || (lead.website ? truncateUrl(lead.website) : "");
+    (lead.email ? lead.email + verifyMark : "") ||
+    lead.phone ||
+    (lead.website ? truncateUrl(lead.website) : "");
 
   return (
     <div
@@ -893,14 +963,41 @@ function LeadRow({
               {sending ? "…" : "Send"}
             </Button>
           ) : phoneOnly ? (
-            <Button
-              size="sm"
-              variant="tinted"
-              onClick={onScript}
-              title="No email — generate a phone call script"
+            <>
+              <Button
+                size="sm"
+                variant="tinted"
+                onClick={onScript}
+                title="No email — generate a phone call script"
+              >
+                Script
+              </Button>
+              <WhatsAppButton
+                leadId={lead.id}
+                phone={lead.phone!}
+                companyName={lead.companyName}
+              />
+            </>
+          ) : lead.hasContactForm && lead.website ? (
+            <a
+              href={lead.website}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="No email — reach out via their website contact form"
+              className="font-mono text-[11px] text-info hover:underline px-1"
             >
-              Script
-            </Button>
+              Form
+            </a>
+          ) : lead.facebookUrl ? (
+            <a
+              href={lead.facebookUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="No email — message their Facebook page"
+              className="font-mono text-[11px] text-info hover:underline px-1"
+            >
+              FB
+            </a>
           ) : (
             <Button size="sm" variant="tinted" disabled title="No contact info">
               Send

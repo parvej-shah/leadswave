@@ -9,6 +9,8 @@ export type ExtractedLead = {
   email: string | null;
   website?: string;
   description?: string;
+  hasContactForm?: boolean;
+  facebookUrl?: string | null;
 };
 
 export type RawResult = {

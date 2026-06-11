@@ -141,6 +141,7 @@ export async function POST(req: NextRequest) {
       campaignId,
       companyName: l.companyName ?? l.email ?? "Unknown",
       email: l.email ?? null,
+      emailSource: l.email ? "imported" : null,
       website: l.website ?? null,
       description: l.description ?? null,
       state: "discovered",

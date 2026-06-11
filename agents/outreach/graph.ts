@@ -8,6 +8,7 @@ type Lead = {
   id: string;
   companyName: string;
   email: string | null;
+  emailStatus?: string | null;
   website: string | null;
   description: string | null;
   category: string | null;

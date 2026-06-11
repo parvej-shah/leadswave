@@ -1,7 +1,6 @@
 import { StateGraph, Annotation } from "@langchain/langgraph";
 import { PlaceLite } from "@/lib/places/client";
 import { mapsSearchNode } from "./nodes/maps_search";
-import { mapsEnrichNode } from "./nodes/maps_enrich";
 import { mapsFilterNode } from "./nodes/maps_filter";
 import { mapsScoreNode } from "./nodes/maps_score";
 import { mapsDedupeNode } from "./nodes/maps_dedupe";
@@ -13,6 +12,10 @@ export type MapsLead = {
   companyName: string;
   website: string | null;
   email: string | null;
+  emailSource?: string | null; // scraped | web_search | guessed | enriched
+  emailStatus?: string | null; // verified | catch_all | unverified | invalid
+  hasContactForm?: boolean | null;
+  facebookUrl?: string | null;
   description: string | null;
   category: LeadCategory;
   address: string | null;
@@ -50,16 +53,15 @@ const MapsScoutAnnotation = Annotation.Root({
 
 export type MapsScoutState = typeof MapsScoutAnnotation.State;
 
+// Step 1: collect leads from Google Maps (no Firecrawl enrichment — that's Step 2)
 const graph = new StateGraph(MapsScoutAnnotation)
   .addNode("mapsSearch", mapsSearchNode)
-  .addNode("enrich", mapsEnrichNode)
   .addNode("filter", mapsFilterNode)
   .addNode("score", mapsScoreNode)
   .addNode("dedupe", mapsDedupeNode)
   .addNode("save", mapsSaveNode)
   .addEdge("__start__", "mapsSearch")
-  .addEdge("mapsSearch", "enrich")
-  .addEdge("enrich", "filter")
+  .addEdge("mapsSearch", "filter")
   .addEdge("filter", "score")
   .addEdge("score", "dedupe")
   .addEdge("dedupe", "save")
@@ -70,13 +72,11 @@ export const mapsScoutGraph = graph.compile();
 // Preview graph — same pipeline but stops before saving. Use to show leads for user review.
 const previewGraph = new StateGraph(MapsScoutAnnotation)
   .addNode("mapsSearch", mapsSearchNode)
-  .addNode("enrich", mapsEnrichNode)
   .addNode("filter", mapsFilterNode)
   .addNode("score", mapsScoreNode)
   .addNode("dedupe", mapsDedupeNode)
   .addEdge("__start__", "mapsSearch")
-  .addEdge("mapsSearch", "enrich")
-  .addEdge("enrich", "filter")
+  .addEdge("mapsSearch", "filter")
   .addEdge("filter", "score")
   .addEdge("score", "dedupe")
   .addEdge("dedupe", "__end__");
