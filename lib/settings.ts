@@ -12,6 +12,7 @@ export type SystemSettings = {
   emailVerifierApiKey: string;
   enrichmentProvider: string;
   enrichmentApiKey: string;
+  apifyApiKey: string;
   googleMapsApiKey: string;
   telegramChatId: string;
   googleClientId: string;
@@ -39,6 +40,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     emailVerifierApiKey: dbSettings?.emailVerifierApiKey || process.env.EMAIL_VERIFIER_API_KEY || "",
     enrichmentProvider: dbSettings?.enrichmentProvider || process.env.ENRICHMENT_PROVIDER || "hunter",
     enrichmentApiKey: dbSettings?.enrichmentApiKey || process.env.ENRICHMENT_API_KEY || "",
+    apifyApiKey: dbSettings?.apifyApiKey || process.env.APIFY_API_KEY || "",
     googleMapsApiKey: dbSettings?.googleMapsApiKey || process.env.GOOGLE_MAPS_API_KEY || "",
     telegramChatId: dbSettings?.telegramChatId || process.env.TELEGRAM_CHAT_ID || "",
     googleClientId: dbSettings?.googleClientId || process.env.GOOGLE_CLIENT_ID || "",

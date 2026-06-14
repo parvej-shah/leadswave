@@ -157,7 +157,11 @@ export default function CampaignDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ campaignId: id }),
       });
-      const data = await res.json();
+      // A crashed route can return an empty body; don't let res.json() throw an
+      // opaque "Unexpected end of JSON input" — surface a useful message instead.
+      const data = await res.json().catch(() => ({
+        error: `Request failed (${res.status} ${res.statusText})`,
+      }));
       setEnrichResult(data);
       // Reload leads to show newly found emails
       const leadsData = await fetch(`/api/campaigns/${id}/leads`).then((r) => r.json());

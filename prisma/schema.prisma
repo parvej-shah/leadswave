@@ -34,6 +34,7 @@ model Lead {
   emailSource   String?   // scraped | web_search | guessed | enriched | imported | manual
   emailStatus   String?   // verified | catch_all | unverified | invalid
   emailVerifiedAt DateTime?
+  enrichmentTriedAt DateTime? // last paid enrichment (Hunter) attempt — skip on re-run to avoid re-billing
   hasContactForm Boolean?  // contact form detected on their website
   facebookUrl   String?   // Facebook page found during scraping
   description   String?
@@ -86,8 +87,9 @@ model Settings {
   firecrawlApiKey      String?
   anthropicApiKey      String?
   emailVerifierApiKey  String?
-  enrichmentProvider   String?  @default("hunter") // hunter | anymailfinder
+  enrichmentProvider   String?  @default("hunter") // hunter | anymailfinder | apify
   enrichmentApiKey     String?
+  apifyApiKey          String?  // Apify token — fallback email finder when Hunter quota is spent
   googleMapsApiKey     String?
   telegramChatId       String?
   googleClientId       String?

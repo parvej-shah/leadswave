@@ -11,11 +11,15 @@ import {
   verifyFoundEmail,
   type EmailVerdict,
 } from "@/lib/email/verify";
-import { enrichEmail, type EnrichmentProvider } from "@/lib/email/enrich";
+import { enrichEmail, QuotaExceededError, type EnrichmentProvider, type EnrichedEmail } from "@/lib/email/enrich";
 
-const BATCH = 5;
-// Paid-API lookups per run — keeps a large backfill from surprise-billing.
-const ENRICHMENT_CAP_PER_RUN = 50;
+// Free/low-tier Firecrawl plans cap ~6 req/min; each lead can fire several
+// map/scrape/search calls, so keep batches small and pace between them.
+const BATCH = 2;
+const BATCH_DELAY_MS = 8000;
+// Paid Hunter.io lookups per run — keeps a large backfill from surprise-billing.
+// Tunable via env; intentionally low because each call costs a Hunter credit.
+const ENRICHMENT_CAP_PER_RUN = Number(process.env.ENRICHMENT_CAP_PER_RUN ?? 25);
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -47,18 +51,30 @@ export async function POST(req: NextRequest) {
       rating: true,
       description: true,
       mapsUrl: true,
+      enrichmentTriedAt: true,
     },
   });
 
   if (leads.length === 0) return NextResponse.json({ updated: 0, emailsFound: 0, total: 0 });
 
-  const firecrawl = new FirecrawlApp({ apiKey: settings.firecrawlApiKey });
+  // Short timeout + no retries: on a rate-limited plan, a default 5min-timeout
+  // x3-retries per call can stall a single lead for 15+ minutes.
+  const firecrawl = new FirecrawlApp({ apiKey: settings.firecrawlApiKey, timeoutMs: 20000, maxRetries: 0 });
   let emailsFound = 0;
   let updated = 0;
-  let enrichmentCalls = 0;
+  let enrichmentCalls = 0; // Hunter credits spent this run (capped)
   let channelsFound = 0; // contact forms + facebook pages discovered
+  // Once Hunter reports its monthly quota is spent, flip to Apify (if a key is
+  // set) for the rest of the run instead of hammering a dead provider.
+  let hunterQuotaSpent = false;
+  let apifyFallbackUsed = 0;
+
+  // Per-run, per-domain cache so two leads sharing a domain only ever cost one
+  // enrichment credit. Maps lowercased domain -> the enrichment result (or null).
+  const enrichmentCache = new Map<string, EnrichedEmail | null>();
 
   for (let i = 0; i < leads.length; i += BATCH) {
+    if (i > 0) await new Promise((r) => setTimeout(r, BATCH_DELAY_MS));
     const batch = leads.slice(i, i + BATCH);
     const results = await Promise.allSettled(
       batch.map(async (lead) => {
@@ -122,15 +138,75 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // Layer 3: paid enrichment API as the final email fallback, capped per run
-        if (!email && settings.enrichmentApiKey && enrichmentCalls < ENRICHMENT_CAP_PER_RUN) {
-          enrichmentCalls++;
-          const enriched = await enrichEmail({
-            provider: (settings.enrichmentProvider as EnrichmentProvider) || "hunter",
-            apiKey: settings.enrichmentApiKey,
-            companyName: lead.companyName,
-            domain: lead.website ? domainFromUrl(lead.website) : null,
-          });
+        // Layer 3: paid enrichment as the final email fallback. Primary is the
+        // configured provider (Hunter by default); once Hunter reports its
+        // monthly quota is spent, the run falls through to Apify (if a key is
+        // set) for this and every later lead.
+        // Cost-control gates, in order:
+        //   • only if no email found by free layers above (scrape/search/guess)
+        //   • only if an enrichment key is configured
+        //   • skip leads with no domain — providers need a domain/URL, so a
+        //     domainless lead is a guaranteed-empty (but still billed) call
+        //   • skip leads already attempted in a prior run (enrichmentTriedAt)
+        //   • reuse a per-run cache so duplicate domains cost one credit total
+        //   • stop once the per-run credit cap is hit
+        let enrichTried = false;
+        const domain = lead.website ? domainFromUrl(lead.website) : null;
+        if (
+          !email &&
+          settings.enrichmentApiKey &&
+          domain &&
+          !lead.enrichmentTriedAt &&
+          enrichmentCalls < ENRICHMENT_CAP_PER_RUN
+        ) {
+          const cacheKey = domain.toLowerCase();
+          let enriched: EnrichedEmail | null = null;
+          if (enrichmentCache.has(cacheKey)) {
+            enriched = enrichmentCache.get(cacheKey) ?? null;
+          } else {
+            const configured = (settings.enrichmentProvider as EnrichmentProvider) || "hunter";
+            // If Hunter already ran out earlier this run, go straight to Apify.
+            const useApify = hunterQuotaSpent && settings.apifyApiKey;
+            try {
+              if (useApify) {
+                apifyFallbackUsed++;
+                enriched = await enrichEmail({
+                  provider: "apify",
+                  apiKey: settings.apifyApiKey,
+                  companyName: lead.companyName,
+                  domain,
+                  websiteUrl: lead.website,
+                });
+              } else {
+                enrichmentCalls++; // a real (billed) primary-provider call
+                enriched = await enrichEmail({
+                  provider: configured,
+                  apiKey: settings.enrichmentApiKey,
+                  companyName: lead.companyName,
+                  domain,
+                  websiteUrl: lead.website,
+                });
+              }
+            } catch (err) {
+              // Primary provider out of quota — switch to Apify for the rest of
+              // the run and retry THIS lead on Apify right now.
+              if (err instanceof QuotaExceededError && err.provider !== "apify") {
+                hunterQuotaSpent = true;
+                if (settings.apifyApiKey) {
+                  apifyFallbackUsed++;
+                  enriched = await enrichEmail({
+                    provider: "apify",
+                    apiKey: settings.apifyApiKey,
+                    companyName: lead.companyName,
+                    domain,
+                    websiteUrl: lead.website,
+                  }).catch(() => null);
+                }
+              }
+            }
+            enrichmentCache.set(cacheKey, enriched);
+          }
+          enrichTried = true; // mark so we never re-bill this lead on re-runs
           if (enriched) {
             email = enriched.email;
             emailSource = "enriched";
@@ -138,7 +214,7 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        if (!email && !description && hasContactForm === null && !facebookUrl) return null;
+        if (!email && !enrichTried && !description && hasContactForm === null && !facebookUrl) return null;
 
         // Re-score with whatever we now know (email +25 if found)
         const newScore = scoreLead({
@@ -156,13 +232,13 @@ export async function POST(req: NextRequest) {
           score: 0,
         });
 
-        return { id: lead.id, email, emailSource, emailStatus, description, hasContactForm, facebookUrl, score: newScore };
+        return { id: lead.id, email, emailSource, emailStatus, description, hasContactForm, facebookUrl, score: newScore, enrichTried };
       }),
     );
 
     for (const result of results) {
       if (result.status !== "fulfilled" || !result.value) continue;
-      const { id, email, emailSource, emailStatus, description, hasContactForm, facebookUrl, score } = result.value;
+      const { id, email, emailSource, emailStatus, description, hasContactForm, facebookUrl, score, enrichTried } = result.value;
       await db.lead.update({
         where: { id },
         data: {
@@ -177,6 +253,8 @@ export async function POST(req: NextRequest) {
           ...(description ? { description } : {}),
           ...(hasContactForm !== null ? { hasContactForm } : {}),
           ...(facebookUrl ? { facebookUrl } : {}),
+          // Stamp the Hunter attempt so a re-run skips this lead (no re-billing)
+          ...(enrichTried ? { enrichmentTriedAt: new Date() } : {}),
           score,
         },
       });
@@ -186,5 +264,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ updated, emailsFound, channelsFound, total: leads.length });
+  return NextResponse.json({
+    updated,
+    emailsFound,
+    channelsFound,
+    enrichmentCalls,
+    apifyFallbackUsed,
+    total: leads.length,
+  });
 }

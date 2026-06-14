@@ -86,6 +86,11 @@ Write the WhatsApp message. Rules:
 - One or two sentences on what we offer and the concrete benefit for them specifically.
 - End with a low-pressure question they can answer in one word.
 - 3-5 short sentences, max ~75 words. No markdown, no placeholders like [name], at most one emoji.
+${
+  /bangladesh/i.test(country)
+    ? "- Write the entire message in natural, conversational Bangla (Bengali script), as a Bangladeshi business owner would text — not a stiff translation."
+    : "- Write in English."
+}
 Return the message text only.`;
 
   try {
@@ -96,7 +101,7 @@ Return the message text only.`;
     // UI can tell the user why the message is generic.
     const reason = err instanceof Error ? err.message : "AI generation failed";
     return NextResponse.json({
-      message: fallbackMessage(lead.companyName, lead.category, offer),
+      message: fallbackMessage(lead.companyName, lead.category, offer, country),
       phone: lead.phone,
       generated: false,
       reason,

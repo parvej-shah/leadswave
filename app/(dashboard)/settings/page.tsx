@@ -27,6 +27,7 @@ type Settings = {
   emailVerifierApiKey: string;
   enrichmentProvider: string;
   enrichmentApiKey: string;
+  apifyApiKey: string;
   googleMapsApiKey: string;
   telegramChatId: string;
   googleClientId: string;
@@ -62,6 +63,7 @@ const DEFAULTS: Settings = {
   emailVerifierApiKey: "",
   enrichmentProvider: "hunter",
   enrichmentApiKey: "",
+  apifyApiKey: "",
   googleMapsApiKey: "",
   telegramChatId: "",
   googleClientId: "",
@@ -341,12 +343,19 @@ export default function SettingsPage() {
               >
                 <option value="hunter">Hunter.io</option>
                 <option value="anymailfinder">Anymailfinder</option>
+                <option value="apify">Apify</option>
               </Select>
               <SecretInput
                 label="Email enrichment API key"
                 placeholder="••••••••••••••••••••••••••••••••"
                 value={form.enrichmentApiKey}
                 onChange={(v) => set("enrichmentApiKey", v)}
+              />
+              <SecretInput
+                label="Apify API token (fallback when Hunter quota runs out)"
+                placeholder="apify_api_••••••••••••••••••••••••••••"
+                value={form.apifyApiKey}
+                onChange={(v) => set("apifyApiKey", v)}
               />
             </CardBody>
           </Card>

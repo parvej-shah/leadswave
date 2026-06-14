@@ -1,7 +1,7 @@
 import { EmailVerdict } from "./verify";
 import { rankEmails } from "@/agents/scout/lib/extract";
 
-export type EnrichmentProvider = "hunter" | "anymailfinder";
+export type EnrichmentProvider = "hunter" | "anymailfinder" | "apify";
 
 export type EnrichedEmail = {
   email: string;
@@ -9,12 +9,33 @@ export type EnrichedEmail = {
 };
 
 /**
+ * Thrown when a provider rejects a call because the account is out of credits
+ * for the month. The caller uses this to switch to a fallback provider for the
+ * rest of the run instead of retrying a provider that will keep refusing.
+ */
+export class QuotaExceededError extends Error {
+  constructor(public provider: string) {
+    super(`${provider} quota exceeded`);
+    this.name = "QuotaExceededError";
+  }
+}
+
+/**
  * Hunter.io domain search: returns emails Hunter has seen on the web for this
  * domain, with per-address verification status and confidence.
+ * Throws QuotaExceededError when Hunter reports the monthly credit limit is hit.
  */
 async function enrichViaHunter(apiKey: string, domain: string): Promise<EnrichedEmail | null> {
   const url = `https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&api_key=${encodeURIComponent(apiKey)}&limit=10`;
   const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+  // 429 = rate/usage limit. Hunter also returns 401/403 with a "usage" error
+  // body when the plan's monthly searches are exhausted; treat those as quota.
+  if (res.status === 429) throw new QuotaExceededError("hunter");
+  if (res.status === 401 || res.status === 403) {
+    const body = await res.text().catch(() => "");
+    if (/quota|usage|limit|credit/i.test(body)) throw new QuotaExceededError("hunter");
+    return null;
+  }
   if (!res.ok) return null;
   const data = (await res.json()) as {
     data?: {
@@ -80,24 +101,82 @@ async function enrichViaAnymailfinder(
   return { email, status };
 }
 
+// Apify actor used to scrape contact info (emails/phones/socials) from a URL.
+// Override with APIFY_CONTACT_ACTOR if you prefer a different actor.
+const APIFY_CONTACT_ACTOR = process.env.APIFY_CONTACT_ACTOR || "vdrmota~contact-info-scraper";
+
+/**
+ * Apify contact-info scraper: runs an actor against the lead's website and
+ * pulls any emails it finds. Used as the fallback once Hunter's monthly quota
+ * is exhausted. Runs synchronously (run-sync) and reads the dataset in one call.
+ * Throws QuotaExceededError if the Apify account is out of usage credits.
+ */
+async function enrichViaApify(apiKey: string, websiteUrl: string): Promise<EnrichedEmail | null> {
+  const endpoint = `https://api.apify.com/v2/acts/${APIFY_CONTACT_ACTOR}/run-sync-get-dataset-items?token=${encodeURIComponent(apiKey)}`;
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      startUrls: [{ url: websiteUrl }],
+      maxRequestsPerStartUrl: 5,
+      maxDepth: 1,
+    }),
+    // Actor runs can take a while; give it room but not forever.
+    signal: AbortSignal.timeout(120000),
+  });
+  if (res.status === 402 || res.status === 429) throw new QuotaExceededError("apify");
+  if (!res.ok) return null;
+
+  const items = (await res.json().catch(() => null)) as
+    | Array<{ emails?: string[]; email?: string | string[] }>
+    | null;
+  if (!Array.isArray(items)) return null;
+
+  // Flatten every email the actor reported across crawled pages.
+  const found = new Set<string>();
+  for (const item of items) {
+    const list = [
+      ...(Array.isArray(item.emails) ? item.emails : []),
+      ...(Array.isArray(item.email) ? item.email : item.email ? [item.email] : []),
+    ];
+    for (const e of list) {
+      const addr = String(e).toLowerCase().trim();
+      if (addr.includes("@")) found.add(addr);
+    }
+  }
+  if (found.size === 0) return null;
+
+  const picked = rankEmails(Array.from(found))[0];
+  if (!picked) return null;
+  // Apify only scrapes the address off the page — it doesn't verify deliverability.
+  return { email: picked, status: "unknown" };
+}
+
 /**
  * Layer 3: last-paid-resort email lookup via a third-party enrichment API.
- * Returns null on any provider failure — enrichment must never break the
- * enrichment pipeline it backs up.
+ * Returns null on a provider miss/failure, but RE-THROWS QuotaExceededError so
+ * the caller can switch to a fallback provider for the rest of the run.
  */
 export async function enrichEmail(opts: {
   provider: EnrichmentProvider;
   apiKey: string;
   companyName: string;
   domain?: string | null;
+  websiteUrl?: string | null;
 }): Promise<EnrichedEmail | null> {
   try {
     if (opts.provider === "hunter") {
       if (!opts.domain) return null; // Hunter searches by domain only
       return await enrichViaHunter(opts.apiKey, opts.domain);
     }
+    if (opts.provider === "apify") {
+      const url = opts.websiteUrl || (opts.domain ? `https://${opts.domain}` : null);
+      if (!url) return null; // Apify scrapes a URL
+      return await enrichViaApify(opts.apiKey, url);
+    }
     return await enrichViaAnymailfinder(opts.apiKey, opts.companyName, opts.domain);
-  } catch {
+  } catch (err) {
+    if (err instanceof QuotaExceededError) throw err; // let the caller fall back
     return null;
   }
 }
