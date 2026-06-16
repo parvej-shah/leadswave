@@ -4,40 +4,31 @@ import { db } from "@/lib/db";
 import { generateText } from "@/lib/gemini";
 import { getSystemSettings } from "@/lib/settings";
 import { resolveOffer } from "@/agents/outreach/lib/offer";
-import FirecrawlApp from "@mendable/firecrawl-js";
+import { loadWebsiteSummary } from "@/agents/outreach/lib/context";
+import { buildWhatsAppOpenerPrompt } from "@/agents/outreach/lib/opener";
 
 async function getUserId() {
   const session = await auth();
   return session?.user?.id ?? null;
 }
 
-function fallbackMessage(
-  companyName: string,
-  category: string | null,
-  offer: string,
-  country: string,
-): string {
-  const shortOffer = offer.trim()
-    ? offer.length > 160
-      ? `${offer.slice(0, 157)}…`
-      : offer
-    : "";
-
+// AI-unavailable fallback. Still an OPENER, not a pitch: a soft observation +
+// a low-pressure question, never an offer or a "let's chat" CTA. See
+// .claude/features/outreach/rules.md.
+function fallbackMessage(companyName: string, category: string | null, country: string): string {
   if (/bangladesh/i.test(country)) {
-    const pitch =
-      shortOffer ||
-      (category === "website_proposal"
-        ? "আমরা লোকাল ব্যবসার জন্য প্রফেশনাল ওয়েবসাইট বানাই, যা আরও বেশি কাস্টমার এনে দেয়।"
-        : "আমরা আপনার ব্যবসার লিডগুলো গুছিয়ে রেখে আরও বেশি কাস্টমারে রূপান্তর করতে সাহায্য করি।");
-    return `হ্যালো ${companyName} টিম! ${pitch} এ নিয়ে এক মিনিট কথা বলা যাবে কি?`;
+    const q =
+      category === "website_proposal"
+        ? "এখন নতুন কাস্টমাররা আপনাদের কীভাবে খুঁজে পান — বেশিরভাগ রেফারেন্সে, নাকি অনলাইনে?"
+        : "এখন কাস্টমারদের ইনকোয়ারিগুলো কীভাবে রাখেন — কোনো সিস্টেমে, নাকি বেশিরভাগ খাতা/হোয়াটসঅ্যাপে?";
+    return `হ্যালো ${companyName} টিম! ${q}`;
   }
 
-  const pitch =
-    shortOffer ||
-    (category === "website_proposal"
-      ? "We build professional websites for local businesses that bring in more customers."
-      : "We help businesses like yours organize and convert more of the leads you're already getting.");
-  return `Hi ${companyName} team! ${pitch} Would you be open to a quick chat?`;
+  const q =
+    category === "website_proposal"
+      ? "Out of curiosity, how do new customers usually find you right now — mostly referrals, or online?"
+      : "Out of curiosity, how does your team track customer inquiries right now — a system, or mostly calls and WhatsApp?";
+  return `Hi ${companyName} team! ${q}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -59,49 +50,33 @@ export async function POST(req: NextRequest) {
 
   // Same recipient context the email personalizer gets: live website content
   // when available, stored description otherwise.
-  let websiteSummary = lead.description ?? "";
-  if (lead.website && settings.firecrawlApiKey) {
-    try {
-      const app = new FirecrawlApp({ apiKey: settings.firecrawlApiKey });
-      const scraped = await app.scrape(lead.website, { formats: ["markdown"] });
-      const md = (scraped as { markdown?: string }).markdown ?? "";
-      if (md) websiteSummary = md.slice(0, 3000);
-    } catch {
-      // fall back to stored description
-    }
-  }
+  const websiteSummary = await loadWebsiteSummary({
+    website: lead.website,
+    description: lead.description,
+    firecrawlApiKey: settings.firecrawlApiKey,
+  });
 
-  const prompt = `You are writing a WhatsApp message on behalf of ${settings.fromName || "our team"} for first-touch outreach to a local business.
-
-About the recipient business:
-${websiteSummary || `Company: ${lead.companyName}`}
-${lead.address ? `Location: ${lead.address}` : ""}
-${angle ? `\nPitch angle: ${angle}\n` : ""}
-Our offer:
-${offer || "(use the pitch angle above)"}
-
-Write the WhatsApp message. Rules:
-- WhatsApp tone: warm, casual-professional, like texting a busy business owner — not a formal email.
-- Open with one specific observation about their business (from the info above) so it clearly isn't spam.
-- One or two sentences on what we offer and the concrete benefit for them specifically.
-- End with a low-pressure question they can answer in one word.
-- 3-5 short sentences, max ~75 words. No markdown, no placeholders like [name], at most one emoji.
-${
-  /bangladesh/i.test(country)
-    ? "- Write the entire message in natural, conversational Bangla (Bengali script), as a Bangladeshi business owner would text — not a stiff translation."
-    : "- Write in English."
-}
-Return the message text only.`;
+  const prompt = buildWhatsAppOpenerPrompt(
+    {
+      fromName: settings.fromName,
+      companyName: lead.companyName,
+      websiteSummary,
+      location: lead.address,
+      angle,
+      offer,
+    },
+    { bangla: /bangladesh/i.test(country) },
+  );
 
   try {
     const message = (await generateText(prompt)).trim();
     return NextResponse.json({ message, phone: lead.phone, generated: true });
   } catch (err) {
-    // AI unavailable — return an offer-aware template plus the reason so the
+    // AI unavailable — return an opener-style template plus the reason so the
     // UI can tell the user why the message is generic.
     const reason = err instanceof Error ? err.message : "AI generation failed";
     return NextResponse.json({
-      message: fallbackMessage(lead.companyName, lead.category, offer, country),
+      message: fallbackMessage(lead.companyName, lead.category, country),
       phone: lead.phone,
       generated: false,
       reason,

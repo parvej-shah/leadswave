@@ -3,6 +3,15 @@ import { db } from "@/lib/db";
 import { Resend } from "resend";
 import { generateText } from "@/lib/gemini";
 import { resolveOffer } from "@/agents/outreach/lib/offer";
+import { buildFollowupPrompt } from "@/agents/outreach/lib/opener";
+
+// Opener-spirited fallbacks when AI is unavailable. Distinct per step so a
+// lead's sequence isn't three identical strings. No pitch / no CTA.
+const FOLLOWUP_FALLBACK: Record<number, string> = {
+  2: "Wanted to add one thought — happy to share what's worked for similar businesses if it's useful.",
+  3: "No worries if now isn't the right time — out of curiosity, is this something on your radar at all right now?",
+  4: "I'll leave it here so I'm not cluttering your inbox. If it's ever worth a look down the line, just reply to this.",
+};
 
 // Protect with a shared secret so only Vercel Cron (or your own trigger) can hit this
 function isAuthorized(req: NextRequest): boolean {
@@ -132,20 +141,19 @@ export async function POST(req: NextRequest) {
 
     const { offer, angle } = resolveOffer(lead.category, lead.campaign);
 
-    const prompt = `You are following up on a cold outreach email (follow-up #${followupNum}).
-Company: ${lead.companyName}
-${angle ? `Pitch angle: ${angle}\n` : ""}Offer: ${offer}
-Prior outbound emails:
-${priorContext}
-
-Write a very short follow-up (1-2 sentences max). Be direct, friendly, and add a tiny new angle or insight rather than just bumping the thread.
-Return plain text only — no greeting, no sign-off.`;
+    const prompt = buildFollowupPrompt({
+      followupNumber: followupNum,
+      companyName: lead.companyName,
+      angle,
+      offer,
+      priorOutbound: priorContext,
+    });
 
     let body: string;
     try {
       body = (await generateText(prompt)).trim();
     } catch {
-      body = `Just wanted to follow up on my previous message about ${offer.slice(0, 60)}. Would love to connect for a quick call.`;
+      body = FOLLOWUP_FALLBACK[followupNum] ?? FOLLOWUP_FALLBACK[2];
     }
 
     const fullBody = `${body}\n\n— ${settings.fromName || "The team"}`;
