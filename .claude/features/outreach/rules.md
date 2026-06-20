@@ -21,6 +21,11 @@ report-driven flagging. The rules live in **one place**: `agents/outreach/lib/op
   full pitch. The pitch happens after they reply (inbox warm/hot draft nodes).
 - Recipient context loads via the shared `agents/outreach/lib/context.ts`
   (`loadWebsiteSummary`) — both channels must use it so context can't drift.
+- Language is resolved from `campaign.country` via the shared
+  `agents/outreach/lib/locale.ts` (`resolveLanguage`) — local language for
+  non-English-fluent markets (Japan→Japanese, Portugal→Portuguese, etc.), English
+  default (incl. high-English-fluency markets like Germany/Netherlands/Nordics/India).
+  Both channels MUST use it; don't reintroduce a per-channel `bangla` boolean.
 - AI-unavailable fallbacks must also be openers (observation + question), never a pitch.
 - Follow-up bodies must vary wording run-to-run — near-identical messages are a spam signal.
   Follow-ups are AI-generated per-lead via `buildFollowupPrompt` (in `opener.ts`), which

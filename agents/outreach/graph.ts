@@ -12,6 +12,7 @@ type Lead = {
   website: string | null;
   description: string | null;
   category: string | null;
+  address?: string | null; // used to anchor the email observation in place
   state: string;
 };
 
@@ -21,6 +22,7 @@ type Campaign = {
   offerText: string;
   websiteOffer: string | null;
   crmOffer: string | null;
+  country: string | null;
 };
 
 type EmailDraft = {

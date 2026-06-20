@@ -11,6 +11,17 @@ Format: one bullet per item, newest on top. Convert relative dates to absolute.
 
 ## Live decisions
 
+- **Outreach language = country→language map, not a Bangla boolean.**
+  `agents/outreach/lib/locale.ts` (`resolveLanguage`) maps `campaign.country` → language;
+  local language for non-English-fluent markets (Japan/Portugal/Spain/Brazil/France/…),
+  English default (incl. Germany/Netherlands/Nordics/India). Core set: English, Bangla,
+  Japanese, German, Portuguese, Spanish, French — extensible (one line). Both email +
+  WhatsApp use it. WhatsApp AI-down fallback curates Bangla+English only; others → English.
+  (2026-06-20)
+- **Email opener brought up to the WhatsApp quality bar.** `buildEmailOpenerPrompt` now has
+  a voice anchor, ~70-word cap, a real subject-line spec, and a GOOD/BAD few-shot; email
+  now also gets `location` (lead.address). `resolveOffer.angle` reworded off the word
+  "Pitch" (cross-channel: email/WhatsApp/follow-ups all benefit). (2026-06-20)
 - **First-touch = soft opener, not pitch (deliverability).** Email + WhatsApp message #1 is
   an observation + soft "what we do" + low-pressure question; NO link/CTA/pricing. Rules
   centralized in `agents/outreach/lib/opener.ts`; context in `agents/outreach/lib/context.ts`.

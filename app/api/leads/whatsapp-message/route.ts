@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { generateText } from "@/lib/gemini";
 import { getSystemSettings } from "@/lib/settings";
 import { resolveOffer } from "@/agents/outreach/lib/offer";
+import { resolveLanguage, type OutreachLanguage } from "@/agents/outreach/lib/locale";
 import { loadWebsiteSummary } from "@/agents/outreach/lib/context";
 import { buildWhatsAppOpenerPrompt } from "@/agents/outreach/lib/opener";
 
@@ -15,8 +16,16 @@ async function getUserId() {
 // AI-unavailable fallback. Still an OPENER, not a pitch: a soft observation +
 // a low-pressure question, never an offer or a "let's chat" CTA. See
 // .claude/features/outreach/rules.md.
-function fallbackMessage(companyName: string, category: string | null, country: string): string {
-  if (/bangladesh/i.test(country)) {
+//
+// We only curate Bangla + English here. For every other language we deliberately
+// fall back to the English opener rather than ship machine copy we can't review —
+// the AI path already localizes; this template only fires when AI is down.
+function fallbackMessage(
+  companyName: string,
+  category: string | null,
+  language: OutreachLanguage,
+): string {
+  if (language === "Bangla") {
     const q =
       category === "website_proposal"
         ? "এখন নতুন কাস্টমাররা আপনাদের কীভাবে খুঁজে পান — বেশিরভাগ রেফারেন্সে, নাকি অনলাইনে?"
@@ -46,7 +55,7 @@ export async function POST(req: NextRequest) {
   if (!lead.phone) return NextResponse.json({ error: "Lead has no phone number" }, { status: 400 });
 
   const { offer, angle } = resolveOffer(lead.category, lead.campaign);
-  const country = lead.campaign.country ?? "";
+  const language = resolveLanguage(lead.campaign.country);
 
   // Same recipient context the email personalizer gets: live website content
   // when available, stored description otherwise.
@@ -65,7 +74,7 @@ export async function POST(req: NextRequest) {
       angle,
       offer,
     },
-    { bangla: /bangladesh/i.test(country) },
+    { language },
   );
 
   try {
@@ -76,7 +85,7 @@ export async function POST(req: NextRequest) {
     // UI can tell the user why the message is generic.
     const reason = err instanceof Error ? err.message : "AI generation failed";
     return NextResponse.json({
-      message: fallbackMessage(lead.companyName, lead.category, country),
+      message: fallbackMessage(lead.companyName, lead.category, language),
       phone: lead.phone,
       generated: false,
       reason,

@@ -4,8 +4,11 @@
 
 **Code:** `app/api/leads/whatsapp-message/route.ts`. Uses the shared
 `agents/outreach/lib/context.ts` (recipient context) and
-`agents/outreach/lib/opener.ts` (`buildWhatsAppOpenerPrompt`). Bangla when the campaign
-country is Bangladesh, English otherwise.
+`agents/outreach/lib/opener.ts` (`buildWhatsAppOpenerPrompt`). Write-language is resolved
+from the campaign country via the shared `agents/outreach/lib/locale.ts`
+(`resolveLanguage`) — local language for non-English-fluent markets, English default. The
+AI-down fallback only curates Bangla + English; other languages fall back to the English
+opener rather than ship unreviewed machine copy.
 
 **Important scope:** the app **only drafts** the message. It does **not** send WhatsApp and
 does **not** pace/throttle sending — that happens manually (copy out, send from a phone) or
