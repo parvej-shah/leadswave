@@ -47,6 +47,57 @@ function languageRule(language: OutreachLanguage): string {
   return `- LANGUAGE: Write the entire message in natural, conversational ${language}, exactly as a local business owner in that market would write it — not a stiff machine translation. Names and brand terms may stay in their original form.`;
 }
 
+/**
+ * Per-lead structural variety. The biggest cold-email spam signal isn't tone —
+ * it's that every message shares the same skeleton (same subject pattern, same
+ * "Saw X… we help… out of curiosity" body shape, same stock phrases). A single
+ * few-shot makes the model converge on one mold. So we deterministically rotate
+ * the subject pattern and the body's opening move per lead (seeded by company
+ * name → stable per lead, spread across leads) and ban the phrases that recur.
+ */
+const SUBJECT_STYLES = [
+  `a short question about something specific they do (do NOT start with the word "quick")`,
+  `a 2-4 word noun phrase naming the specific thing you noticed (no verb, no "question")`,
+  `a casual lowercase fragment that reads like an internal note to yourself about them`,
+  `their company or city name plus one concrete detail, comma-separated`,
+  `a single curious word or two about their work — understated, almost cryptic`,
+];
+
+const BODY_OPENINGS = [
+  `Open by naming the SPECIFIC thing you noticed about them, stated plainly — no "I came across" / "I was looking at" preamble.`,
+  `Open mid-thought, as if continuing a thought — lead with what struck you about their work, not with how you found them.`,
+  `Open with a genuine one-line reaction to something concrete on their site/listing, then the soft line.`,
+  `Open with the low-pressure question itself, then briefly say why it caught your eye. (Question can come first.)`,
+  `Open by referencing their location or niche and one specific detail, conversational.`,
+];
+
+/** Stable non-negative hash of a string, for deterministic per-lead rotation. */
+function seedIndex(seed: string, modulo: number): number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (Math.imul(31, h) + seed.charCodeAt(i)) | 0;
+  return Math.abs(h) % modulo;
+}
+
+/** Phrases that kept recurring across drafts — banned so messages don't cluster. */
+const BANNED_PHRASES = [
+  `"quick question about/for ..." as a subject`,
+  `"nothing slips through the cracks"`,
+  `"you guys"`,
+  `"came across" / "was just looking at" as the opening words`,
+  `"out of curiosity"`,
+  `"how are you currently tracking/managing ..."`,
+];
+
+function varietyBlock(seed: string): string {
+  const subject = SUBJECT_STYLES[seedIndex(seed, SUBJECT_STYLES.length)];
+  const body = BODY_OPENINGS[seedIndex(seed + "::body", BODY_OPENINGS.length)];
+  return `STRUCTURE (vary it — these messages must NOT look mass-produced):
+- Subject shape for THIS email: ${subject}
+- Body opening for THIS email: ${body}
+- Do NOT reuse any of these worn phrases (every sender uses them — they read as spam):
+${BANNED_PHRASES.map((p) => `  · ${p}`).join("\n")}`;
+}
+
 function contextBlock(ctx: OpenerContext): string {
   return [
     `About the recipient business:`,
@@ -72,25 +123,24 @@ VOICE: Write like a real person who genuinely opened their website/listing two m
 and is firing off a quick, curious note — not a marketer running a template. It must feel
 hand-typed for THIS business, not mail-merged.
 
+${varietyBlock(ctx.companyName)}
+
 Write a short opener email. Rules:
-- Subject: 3-6 words, lowercase-feeling, like a human typed it in a hurry. Reference ONE
-  concrete thing about THEIR business (their name, what they do, or their city). Personal,
-  not promotional. NO ALL CAPS, "Re:", clickbait, emojis, exclamation marks, the word
-  "free", pricing, or our offer. Think "quick question about <their thing>", not
-  "Grow your business with us".
-- Body: 2-3 short sentences, max ~70 words. Follow the opener rules below.
+- Subject: 3-6 words, lowercase-feeling, like a human typed it in a hurry — following the
+  subject shape above. Reference ONE concrete thing about THEIR business. Personal, not
+  promotional. NO ALL CAPS, "Re:", clickbait, emojis, exclamation marks, the word "free",
+  pricing, or our offer.
+- Body: 2-3 short sentences, max ~70 words, following the body opening above.
 ${SHARED_RULES}
 - Sign off as: ${ctx.fromName || "The team"}
 ${languageRule(opts.language)}
 
-Good vs bad (match the GOOD tone, do not copy the words):
-- GOOD subject: "quick question about <CompanyName>"
-- BAD subject: "Boost Your Sales Today!! 🚀"
-- GOOD body: "Saw <CompanyName> handles <specific thing from the info above> over in <city> —
-  nice setup. We help shops like yours <one soft phrase>. Out of curiosity, how are you
-  handling <relevant problem> right now?"
-- BAD body: "We are a leading provider of solutions that help businesses like yours grow.
-  Book a call to learn more about our services and pricing."
+Tone reference only — DO NOT reuse this wording, structure, or phrasing; it is a register
+example, not a template:
+- A bad email reads like: "We are a leading provider of solutions that help businesses like
+  yours grow. Book a call to learn more about our services and pricing."
+- A good email sounds like a curious human who actually looked at their work and asked a
+  real question — but find your OWN words and your OWN opening for this specific business.
 
 Return JSON only:
 { "subject": "...", "body": "..." }`;
@@ -143,8 +193,11 @@ export function buildWhatsAppOpenerPrompt(
 
 ${contextBlock(ctx)}
 
+${varietyBlock(ctx.companyName + "::wa")}
+
 Write the WhatsApp message. Rules:
 - WhatsApp tone: warm, casual, like texting a busy business owner — not a formal email.
+- Follow the body opening above for how to start; do not reuse the worn phrases listed.
 ${SHARED_RULES}
 - 2-4 short sentences, max ~60 words. No markdown, at most one emoji.
 ${languageRule(opts.language)}

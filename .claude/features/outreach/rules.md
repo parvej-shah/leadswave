@@ -26,6 +26,14 @@ report-driven flagging. The rules live in **one place**: `agents/outreach/lib/op
   non-English-fluent markets (Japan→Japanese, Portugal→Portuguese, etc.), English
   default (incl. high-English-fluency markets like Germany/Netherlands/Nordics/India).
   Both channels MUST use it; don't reintroduce a per-channel `bangla` boolean.
+- **Structural variety is mandatory — same shape across leads IS the spam signal.** Good
+  tone is not enough; if every email shares one subject pattern + one body skeleton + the
+  same stock phrases, filters (and humans) cluster them instantly. `opener.ts` rotates the
+  subject style and body opening per-lead (deterministic, seeded by company name via
+  `seedIndex`) and bans recurring phrases (`BANNED_PHRASES`: "quick question about X",
+  "nothing slips through the cracks", "you guys", "came across", "out of curiosity", …).
+  The few-shot is a TONE reference only — never a copyable template. Don't reintroduce a
+  single fixed example or a fixed "quick question about <company>" subject.
 - AI-unavailable fallbacks must also be openers (observation + question), never a pitch.
 - Follow-up bodies must vary wording run-to-run — near-identical messages are a spam signal.
   Follow-ups are AI-generated per-lead via `buildFollowupPrompt` (in `opener.ts`), which
