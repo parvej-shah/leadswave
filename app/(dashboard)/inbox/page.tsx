@@ -524,7 +524,7 @@ function ThreadMessage({ msg }: { msg: Message }) {
           borderLeft: inbound ? "2px solid var(--success)" : "2px solid var(--fg-5)",
         }}
       >
-        <RichTextViewer html={msg.bodyHtml} text={msg.body} />
+        <RichTextViewer html={msg.bodyHtml || msg.body?.replace(/\n/g, "<br>")} />
       </div>
     </div>
   );

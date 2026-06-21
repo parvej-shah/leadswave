@@ -525,7 +525,7 @@ function MessageBubble({ message }: { message: Message }) {
           <p className="font-mono text-[11px] text-fg-3 m-0 font-medium">{message.subject}</p>
         )}
         <RichTextViewer
-          html={message.bodyHtml || message.body}
+          html={message.bodyHtml || message.body.replace(/\n/g, "<br>")}
           className="font-mono text-[11.5px] text-fg-2 leading-relaxed"
         />
       </div>
