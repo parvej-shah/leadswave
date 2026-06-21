@@ -29,7 +29,7 @@ const ALLOWED = new Set([
 function scrub(dirty: string): string {
   if (typeof window === "undefined") return dirty; // SSR: server already sanitized
   const doc = new DOMParser().parseFromString(dirty, "text/html");
-  doc.querySelectorAll("*").forEach((el) => {
+  doc.body.querySelectorAll("*").forEach((el) => {
     if (!ALLOWED.has(el.tagName)) {
       el.replaceWith(...Array.from(el.childNodes));
       return;

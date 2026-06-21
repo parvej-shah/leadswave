@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Button,
@@ -162,6 +162,8 @@ export default function SettingsPage() {
   const [saveState, setSaveState] = useState<"idle" | "saved" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [form, setForm] = useState<Settings>(DEFAULTS);
+  const savedForm = useRef<Settings>(DEFAULTS);
+  const isDirty = JSON.stringify(form) !== JSON.stringify(savedForm.current);
 
   type GoogleProfile = { connected: boolean; name?: string; email?: string; image?: string };
   const [googleProfile, setGoogleProfile] = useState<GoogleProfile | null>(null);
@@ -175,12 +177,14 @@ export default function SettingsPage() {
       fetch("/api/auth/google/profile").then((r) => r.json()),
     ])
       .then(([data, profile]) => {
-        setForm({
+        const loaded = {
           ...DEFAULTS,
           ...Object.fromEntries(
             Object.entries(data).filter(([, v]) => v !== null && v !== undefined)
           ),
-        });
+        };
+        setForm(loaded);
+        savedForm.current = loaded;
         setGoogleProfile(profile);
       })
       .catch(() => {})
@@ -233,6 +237,7 @@ export default function SettingsPage() {
         const d = await res.json();
         throw new Error(d.error ?? "Save failed");
       }
+      savedForm.current = { ...form };
       setSaveState("saved");
       setTimeout(() => setSaveState("idle"), 2500);
     } catch (err) {
@@ -643,7 +648,7 @@ export default function SettingsPage() {
 
         {/* Save bar */}
         <div className="flex items-center gap-3 pt-4 border-t border-border">
-          <Button type="submit" disabled={saving} iconStart={saving ? "refresh" : undefined}>
+          <Button type="submit" disabled={saving || !isDirty} iconStart={saving ? "refresh" : undefined}>
             {saving ? "Saving…" : "Save Changes"}
           </Button>
           {saveState === "saved" && (

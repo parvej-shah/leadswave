@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { getSystemSettings } from "@/lib/settings";
 import { outreachGraph } from "@/agents/outreach/graph";
 
-const COOLDOWN_MS = 120_000; // 2 minutes between sends
+const COOLDOWN_MS = 10_000; // 2 minutes between sends
 const MAX_PER_RUN = 4; // max leads processed per campaign per cron invocation
 
 function isAuthorized(req: NextRequest): boolean {

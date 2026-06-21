@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -95,6 +95,12 @@ export default function CampaignDetailPage() {
   } | null>(null);
   const [togglingAutoSend, setTogglingAutoSend] = useState(false);
 
+  const refreshLeads = useCallback(() => {
+    return fetch(`/api/campaigns/${id}/leads`)
+      .then((r) => r.json())
+      .then((data) => { if (Array.isArray(data)) setLeads(data); });
+  }, [id]);
+
   useEffect(() => {
     Promise.all([
       fetch(`/api/campaigns/${id}`).then((r) => r.json()),
@@ -108,6 +114,13 @@ export default function CampaignDetailPage() {
       .catch((e: Error) => setLoadError(e.message))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Poll for lead updates while auto-send is active
+  useEffect(() => {
+    if (!campaign?.autoSend) return;
+    const interval = setInterval(refreshLeads, 15_000);
+    return () => clearInterval(interval);
+  }, [campaign?.autoSend, refreshLeads]);
 
   const filtered = useMemo(() => {
     const list = leads.filter((l) => {

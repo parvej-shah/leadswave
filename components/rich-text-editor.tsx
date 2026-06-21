@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import Link from "@tiptap/extension-link";
 import { cn } from "@/lib/utils";
 import { Icon, type IconName } from "@/components/ui";
 
@@ -38,6 +39,19 @@ const INLINE_TOOLS: ToolButton[] = [
   { icon: "bold", title: "Bold", isActive: (e) => e.isActive("bold"), run: (e) => e.chain().focus().toggleBold().run() },
   { icon: "italic", title: "Italic", isActive: (e) => e.isActive("italic"), run: (e) => e.chain().focus().toggleItalic().run() },
   { icon: "strikethrough", title: "Strikethrough", isActive: (e) => e.isActive("strike"), run: (e) => e.chain().focus().toggleStrike().run() },
+  {
+    icon: "link",
+    title: "Link",
+    isActive: (e) => e.isActive("link"),
+    run: (e) => {
+      if (e.isActive("link")) {
+        e.chain().focus().unsetLink().run();
+        return;
+      }
+      const url = window.prompt("URL");
+      if (url) e.chain().focus().setLink({ href: url }).run();
+    },
+  },
 ];
 
 const BLOCK_TOOLS: ToolButton[] = [
@@ -57,7 +71,10 @@ export function RichTextEditor({
   editorClassName,
 }: RichTextEditorProps) {
   const editor = useEditor({
-    extensions: [StarterKit.configure({ heading: minimal ? false : { levels: [1, 2, 3] } })],
+    extensions: [
+      StarterKit.configure({ heading: minimal ? false : { levels: [1, 2, 3] } }),
+      Link.configure({ openOnClick: false, HTMLAttributes: { rel: "noopener noreferrer nofollow" } }),
+    ],
     content: value || "",
     immediatelyRender: false,
     editorProps: {
