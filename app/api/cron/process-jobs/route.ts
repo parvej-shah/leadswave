@@ -6,6 +6,7 @@ import { resolveOffer } from "@/agents/outreach/lib/offer";
 import { buildFollowupPrompt } from "@/agents/outreach/lib/opener";
 import { buildOutboundEmail } from "@/lib/email/signature";
 import { stripSignature } from "@/lib/html/plain";
+import { sendTelegramMessage } from "@/lib/telegram";
 
 // Opener-spirited fallbacks when AI is unavailable. Distinct per step so a
 // lead's sequence isn't three identical strings. No pitch / no CTA.
@@ -201,6 +202,14 @@ export async function POST(req: NextRequest) {
       await db.job.update({ where: { id: job.id }, data: { status: "failed" } });
       failed++;
     }
+  }
+
+  if (settings.telegramChatId && (processed > 0 || failed > 0)) {
+    const lines = [
+      `🔁 <b>Follow-Up Summary</b>`,
+      `Sent: ${processed} | Failed: ${failed} | Total jobs: ${jobs.length}`,
+    ];
+    await sendTelegramMessage(settings.telegramChatId, lines.join("\n")).catch(() => {});
   }
 
   return NextResponse.json({ ok: true, processed, failed, total: jobs.length });

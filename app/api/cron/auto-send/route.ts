@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSystemSettings } from "@/lib/settings";
 import { outreachGraph } from "@/agents/outreach/graph";
+import { sendTelegramMessage, escapeHtml } from "@/lib/telegram";
 
 const COOLDOWN_MS = 120_000; // 2 minutes between sends
 const MAX_PER_RUN = 4; // max leads processed per campaign per cron invocation
@@ -173,6 +174,19 @@ export async function POST(req: NextRequest) {
     }
 
     campaignResults.push({ campaignId: campaign.id, sent: sentThisRun, remaining });
+  }
+
+  if (settings.telegramChatId && (totalProcessed > 0 || totalFailed > 0)) {
+    const lines = [
+      `📤 <b>Auto-Send Summary</b>`,
+      `Sent: ${totalProcessed} | Failed: ${totalFailed}`,
+      ...campaignResults.map((c) => {
+        const camp = campaigns.find((ca) => ca.id === c.campaignId);
+        const name = camp ? escapeHtml(camp.name) : c.campaignId;
+        return `• ${name}: ${c.sent} sent, ${c.remaining >= 0 ? `${c.remaining} remaining` : "daily cap reached"}`;
+      }),
+    ];
+    await sendTelegramMessage(settings.telegramChatId, lines.join("\n")).catch(() => {});
   }
 
   return NextResponse.json({
