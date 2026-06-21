@@ -222,25 +222,27 @@ export function Sidebar({ userEmail, userName, campaigns, inboxHotCount }: Sideb
 function WorkspaceHeader({ collapsed }: { collapsed: boolean }) {
   if (collapsed) {
     return (
-      <div className="flex justify-center pt-1 pb-2 border-b border-border mb-1">
-        <span className="w-[26px] h-[26px] rounded-md bg-amber-tinted-surface border border-amber-border flex items-center justify-center text-amber font-mono text-[11px] font-bold">
-          L
-        </span>
+      <div className="flex justify-center pt-1 pb-2 border-b border-border mb-1 overflow-hidden">
+        <img
+          src="/logo.png"
+          alt="LeadsWave"
+          width={2508}
+          height={627}
+          className="h-auto w-[26px] rounded-md"
+        />
       </div>
     );
   }
   return (
     <div className="flex items-center gap-2 px-2 py-2 rounded-md">
-      <span className="w-[26px] h-[26px] rounded-md bg-amber-tinted-surface border border-amber-border flex items-center justify-center text-amber font-mono text-[12px] font-bold shrink-0">
-        L
-      </span>
-      <div className="flex-1 min-w-0">
-        <p className="font-mono text-[12px] font-semibold text-fg-1 m-0 leading-tight truncate">
-          LeadsWave
-        </p>
-        <p className="font-mono text-[9px] text-fg-4 m-0 leading-tight uppercase tracking-[0.06em]">
-          Free · Solo
-        </p>
+      <div className="flex-1 min-w-0 overflow-hidden">
+        <img
+          src="/logo.png"
+          alt="LeadsWave"
+          width={2508}
+          height={627}
+          className="h-auto w-full max-w-[168px]"
+        />
       </div>
     </div>
   );

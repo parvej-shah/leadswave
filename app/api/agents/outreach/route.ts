@@ -32,6 +32,8 @@ export async function POST(req: NextRequest) {
       anthropicApiKey: settings.anthropicApiKey ?? "",
       fromEmail: settings.fromEmail,
       fromName: settings.fromName ?? "",
+      signatureText: settings.signatureText ?? "",
+      signatureHtml: settings.signatureHtml ?? "",
     });
     return NextResponse.json({ ok: true, sent: result.sent, subject: result.emailDraft?.subject });
   } catch (err) {

@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { db } from "@/lib/db";
 import { OutreachState } from "../graph";
+import { appendOpenerSignature } from "@/lib/email/signature";
 
 export async function sendNode(state: OutreachState): Promise<Partial<OutreachState>> {
   if (!state.lead.email) throw new Error(`Lead ${state.leadId} has no email address`);
@@ -11,11 +12,21 @@ export async function sendNode(state: OutreachState): Promise<Partial<OutreachSt
 
   const resend = new Resend(state.resendApiKey);
 
+  // First-touch opener: permanent signature, but plain text + URLs stripped
+  // (opener invariant forbids links in message #1). We send AND store the signed
+  // text so the thread viewer shows exactly what the recipient received; the AI
+  // follow-up prior-context prompt strips the signature back off (stripSignature).
+  const sentText = appendOpenerSignature(
+    state.emailDraft.body,
+    state.signatureText,
+    state.signatureHtml,
+  );
+
   const { data, error } = await resend.emails.send({
     from: state.fromName ? `${state.fromName} <${state.fromEmail}>` : state.fromEmail,
     to: state.lead.email,
     subject: state.emailDraft.subject,
-    text: state.emailDraft.body,
+    text: sentText,
   });
 
   if (error) throw new Error(`Resend error: ${error.message ?? JSON.stringify(error)}`);
@@ -26,7 +37,7 @@ export async function sendNode(state: OutreachState): Promise<Partial<OutreachSt
       leadId: state.leadId,
       direction: "outbound",
       subject: state.emailDraft.subject,
-      body: state.emailDraft.body,
+      body: sentText,
     },
   });
 

@@ -15,12 +15,14 @@ import {
   Input,
 } from "@/components/ui";
 import { WhatsAppButton } from "@/components/whatsapp-button";
+import { RichTextViewer } from "@/components/rich-text-viewer";
 
 type Message = {
   id: string;
   direction: "outbound" | "inbound" | "system";
   subject: string | null;
   body: string;
+  bodyHtml?: string | null;
   sentAt: string;
 };
 
@@ -398,6 +400,7 @@ export default function LeadDetailPage() {
                     setComposeBody(e.target.value);
                   }}
                   disabled={sending}
+                  hint="First-touch openers send as plain text to protect deliverability — your signature is appended automatically (links removed for the first email). Replies in the inbox support rich text."
                 />
 
                 {genError && <Toast kind="hot" pill="ERROR">{genError}</Toast>}
@@ -514,9 +517,11 @@ function MessageBubble({ message }: { message: Message }) {
         {message.subject && (
           <p className="font-mono text-[11px] text-fg-3 m-0 font-medium">{message.subject}</p>
         )}
-        <p className="font-mono text-[11.5px] text-fg-2 m-0 whitespace-pre-wrap leading-relaxed">
-          {message.body}
-        </p>
+        <RichTextViewer
+          html={message.bodyHtml}
+          text={message.body}
+          className="font-mono text-[11.5px] text-fg-2 leading-relaxed"
+        />
       </div>
     </div>
   );

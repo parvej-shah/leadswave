@@ -40,6 +40,7 @@ type Campaign = {
   businessType: string | null;
   country: string | null;
   status: string;
+  autoSend: boolean;
   createdAt: string;
 };
 
@@ -92,6 +93,7 @@ export default function CampaignDetailPage() {
     channelsFound?: number;
     total: number;
   } | null>(null);
+  const [togglingAutoSend, setTogglingAutoSend] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -171,6 +173,23 @@ export default function CampaignDetailPage() {
     }
   }
 
+  async function handleToggleAutoSend() {
+    if (!campaign) return;
+    setTogglingAutoSend(true);
+    try {
+      const res = await fetch(`/api/campaigns/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autoSend: !campaign.autoSend }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setCampaign(data);
+    } finally {
+      setTogglingAutoSend(false);
+    }
+  }
+
   function toggleSort(key: SortKey) {
     setSort((s) =>
       s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" }
@@ -235,6 +254,27 @@ export default function CampaignDetailPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleToggleAutoSend}
+              disabled={togglingAutoSend || campaign.status !== "active"}
+              className={[
+                "flex items-center gap-2 px-3 py-1.5 rounded-lg border font-mono text-[11px] uppercase tracking-wider transition-all duration-200 cursor-pointer",
+                campaign.autoSend
+                  ? "bg-amber-bg border-amber-border text-amber"
+                  : "bg-surface border-border text-fg-4 hover:border-border-strong hover:text-fg-2",
+                (togglingAutoSend || campaign.status !== "active") ? "opacity-50 cursor-not-allowed" : "",
+              ].join(" ")}
+              title={campaign.status !== "active" ? "Campaign must be active to enable auto-send" : ""}
+            >
+              <span
+                className={[
+                  "inline-block w-2 h-2 rounded-full transition-colors duration-200",
+                  campaign.autoSend ? "bg-amber animate-pulse" : "bg-fg-5",
+                ].join(" ")}
+              />
+              {togglingAutoSend ? "Updating…" : campaign.autoSend ? "Auto Send ON" : "Auto Send OFF"}
+            </button>
             {enrichResult && (
               <span className="font-mono text-[11px] text-fg-3">
                 {enrichResult.emailsFound === 0

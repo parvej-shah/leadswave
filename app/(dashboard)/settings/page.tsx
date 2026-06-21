@@ -16,11 +16,15 @@ import {
   Toggle,
 } from "@/components/ui";
 import { Eye, EyeOff } from "lucide-react";
+import { RichTextEditor } from "@/components/rich-text-editor";
+import { RichTextViewer } from "@/components/rich-text-viewer";
+import { htmlToPlainTextClient, stripUrls } from "@/lib/html/plain";
 
 type Settings = {
   offerText: string;
   fromName: string;
   fromEmail: string;
+  signatureHtml: string;
   resendApiKey: string;
   firecrawlApiKey: string;
   anthropicApiKey: string;
@@ -57,6 +61,7 @@ const DEFAULTS: Settings = {
   offerText: "",
   fromName: "",
   fromEmail: "",
+  signatureHtml: "",
   resendApiKey: "",
   firecrawlApiKey: "",
   anthropicApiKey: "",
@@ -77,6 +82,38 @@ const DEFAULTS: Settings = {
   notifyHotOnly: false,
   notifyEmailDigest: false,
 };
+
+/**
+ * Live preview of how the signature renders in each context: the full version
+ * (replies + follow-ups) and the plain, link-stripped version (first-touch
+ * openers). Uses the same `RichTextViewer` + `stripUrls` the send paths use, so
+ * what's shown matches what recipients get.
+ */
+function SignaturePreview({ html }: { html: string }) {
+  const openerText = stripUrls(htmlToPlainTextClient(html));
+  const hasContent = !!html.replace(/<[^>]*>/g, "").trim();
+  if (!hasContent) return null;
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="rounded-md border border-border bg-[oklch(0.115_0_0)] p-3">
+        <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4 mb-2 m-0">
+          Replies &amp; follow-ups
+        </p>
+        <div className="border-t border-border-soft pt-2">
+          <RichTextViewer html={html} className="text-fg-2 text-[12px] leading-[1.6]" />
+        </div>
+      </div>
+      <div className="rounded-md border border-border bg-[oklch(0.115_0_0)] p-3">
+        <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4 mb-2 m-0">
+          First-touch opener (plain, links removed)
+        </p>
+        <pre className="border-t border-border-soft pt-2 font-mono text-[12px] text-fg-2 leading-[1.6] whitespace-pre-wrap m-0">
+          {openerText || "—"}
+        </pre>
+      </div>
+    </div>
+  );
+}
 
 function SecretInput({
   label,
@@ -298,6 +335,14 @@ export default function SettingsPage() {
                   onChange={(e) => set("fromEmail", e.target.value)}
                 />
               </div>
+              <RichTextEditor
+                label="Email signature"
+                value={form.signatureHtml}
+                onChange={(html) => set("signatureHtml", html)}
+                placeholder="Alex Kim&#10;Founder, LeadsWave&#10;alex@yourdomain.com"
+                hint="Write your name here — it's appended to every email. Replies and follow-ups get the full signature (links included); first-touch openers get a plain-text version with links removed to protect deliverability."
+              />
+              <SignaturePreview html={form.signatureHtml} />
             </CardBody>
           </Card>
         )}

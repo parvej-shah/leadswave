@@ -13,3 +13,8 @@
 - Inbound matching is by sender email → lead. If no match, don't fabricate a lead silently;
   handle the unmatched case explicitly.
 - Persist every inbound and every sent reply as a `Message`.
+- The reply composer is rich text (`components/rich-text-editor.tsx`); the API takes `body`
+  (plain, canonical) + `bodyHtml`. Replies send multipart HTML+text with the operator's
+  signature appended (`lib/email/signature.ts`). Render threads with `RichTextViewer`
+  (falls back to plain `body` for legacy/AI messages). HTML is sanitized server-side at the
+  write boundary — don't trust raw client HTML.

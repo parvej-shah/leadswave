@@ -1,0 +1,17 @@
+name: Auto-Send Openers
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  auto-send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger auto-send cron
+        run: |
+          curl -sf -X POST "${{ secrets.APP_URL }}/api/cron/auto-send" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --max-time 540

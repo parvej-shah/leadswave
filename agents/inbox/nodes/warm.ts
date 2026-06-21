@@ -2,6 +2,7 @@ import { generateText } from "@/lib/gemini";
 import { db } from "@/lib/db";
 import { sendTelegramMessage, notifyAiFailure, escapeHtml } from "@/lib/telegram";
 import { InboxState } from "../graph";
+import { stripSignature } from "@/lib/html/plain";
 
 export async function warmNode(state: InboxState): Promise<Partial<InboxState>> {
   await db.lead.update({
@@ -15,7 +16,7 @@ export async function warmNode(state: InboxState): Promise<Partial<InboxState>> 
   });
 
   const thread = state.priorMessages
-    .map((m) => `[${m.direction.toUpperCase()}] ${m.body}`)
+    .map((m) => `[${m.direction.toUpperCase()}] ${stripSignature(m.body)}`)
     .join("\n\n---\n\n");
 
   const prompt = `You are drafting a brief, warm follow-up reply on behalf of a B2B sales rep.

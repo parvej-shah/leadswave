@@ -26,7 +26,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
 
   const { id } = await ctx.params;
   const body = await req.json();
-  const { name, query, location, offerText, websiteOffer, crmOffer, status, businessType, country } = body as {
+  const { name, query, location, offerText, websiteOffer, crmOffer, status, businessType, country, autoSend } = body as {
     name?: string;
     query?: string;
     location?: string;
@@ -36,6 +36,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
     status?: string;
     businessType?: string;
     country?: string;
+    autoSend?: boolean;
   };
 
   const existing = await db.campaign.findFirst({
@@ -54,6 +55,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
     status?: string;
     businessType?: string;
     country?: string;
+    autoSend?: boolean;
   } = {};
 
   if (typeof name === "string") data.name = name.trim();
@@ -67,6 +69,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
   if (typeof status === "string" && ["active", "paused", "completed"].includes(status)) {
     data.status = status;
   }
+  if (typeof autoSend === "boolean") data.autoSend = autoSend;
 
   if ((data.name !== undefined && !data.name) || (data.query !== undefined && !data.query) || (data.location !== undefined && !data.location)) {
     return NextResponse.json(

@@ -530,7 +530,7 @@ export default function LeadsPage() {
         <div className="bg-surface border border-border rounded-lg overflow-hidden">
           {/* Header row */}
           <div
-            className="grid border-b border-border bg-[oklch(0.115_0_0)] sticky top-0 z-[2]"
+            className="grid border-b border-border bg-[oklch(0.115_0_0)] sticky top-0 z-0"
             style={{ gridTemplateColumns: gridCols }}
           >
             <div className="px-3 py-2.5 flex items-center">

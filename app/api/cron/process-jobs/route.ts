@@ -4,6 +4,8 @@ import { Resend } from "resend";
 import { generateText } from "@/lib/gemini";
 import { resolveOffer } from "@/agents/outreach/lib/offer";
 import { buildFollowupPrompt } from "@/agents/outreach/lib/opener";
+import { buildOutboundEmail } from "@/lib/email/signature";
+import { stripSignature } from "@/lib/html/plain";
 
 // Opener-spirited fallbacks when AI is unavailable. Distinct per step so a
 // lead's sequence isn't three identical strings. No pitch / no CTA.
@@ -133,10 +135,12 @@ export async function POST(req: NextRequest) {
       lead.messages.find((m) => m.direction === "outbound")?.subject ?? "our outreach";
     const subject = `Re: ${firstSubject}`;
 
-    // Build a short contextual follow-up via AI
+    // Build a short contextual follow-up via AI. Stored bodies now include the
+    // signature (so threads show what was sent) — strip it back off here so the
+    // model isn't fed boilerplate as if it were message content.
     const priorContext = lead.messages
       .filter((m) => m.direction === "outbound")
-      .map((m) => m.body)
+      .map((m) => stripSignature(m.body))
       .join("\n\n---\n\n");
 
     const { offer, angle } = resolveOffer(lead.category, lead.campaign);
@@ -156,21 +160,31 @@ export async function POST(req: NextRequest) {
       body = FOLLOWUP_FALLBACK[followupNum] ?? FOLLOWUP_FALLBACK[2];
     }
 
-    const fullBody = `${body}\n\n— ${settings.fromName || "The team"}`;
+    // Append the operator's signature (its name line replaces the old
+    // "— fromName" sign-off). Multipart HTML+text; we persist the SIGNED text
+    // (`outbound.bodyText`) + rendered HTML so the thread shows what was sent.
+    // The AI prior-context above strips signatures back off (stripSignature).
+    const outbound = buildOutboundEmail({
+      bodyText: body,
+      signatureHtml: settings.signatureHtml,
+      signatureText: settings.signatureText
+        || (settings.fromName ? `— ${settings.fromName}` : ""),
+    });
 
     try {
       const { error } = await resend.emails.send({
         from,
         to: lead.email,
         subject,
-        text: fullBody,
+        html: outbound.html,
+        text: outbound.text,
       });
 
       if (error) throw new Error(error.message);
 
       await Promise.all([
         db.message.create({
-          data: { leadId: lead.id, direction: "outbound", subject, body: fullBody },
+          data: { leadId: lead.id, direction: "outbound", subject, body: outbound.bodyText, bodyHtml: outbound.bodyHtml },
         }),
         db.lead.update({
           where: { id: lead.id },

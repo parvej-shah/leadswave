@@ -11,12 +11,16 @@ import {
   Segmented,
   Toast,
 } from "@/components/ui";
+import { RichTextEditor } from "@/components/rich-text-editor";
+import { RichTextViewer } from "@/components/rich-text-viewer";
+import { plainToHtml } from "@/lib/html/plain";
 
 type Message = {
   id: string;
   direction: "outbound" | "inbound" | "system";
   subject: string | null;
   body: string | null;
+  bodyHtml?: string | null;
   sentAt: string;
 };
 
@@ -68,6 +72,7 @@ export default function InboxPage() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<InboxLead | null>(null);
   const [draftText, setDraftText] = useState("");
+  const [draftHtml, setDraftHtml] = useState("");
   const [aiDraftOriginal, setAiDraftOriginal] = useState("");
   const [sending, setSending] = useState(false);
   const [sentToast, setSentToast] = useState(false);
@@ -97,6 +102,7 @@ export default function InboxPage() {
     const draft = lead.messages.find((m) => m.direction === "system");
     const text = draft?.body ?? "";
     setDraftText(text);
+    setDraftHtml(plainToHtml(text));
     setAiDraftOriginal(text);
   }, []);
 
@@ -107,7 +113,7 @@ export default function InboxPage() {
     const res = await fetch("/api/inbox/reply", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ leadId: selected.id, body: draftText }),
+      body: JSON.stringify({ leadId: selected.id, body: draftText, bodyHtml: draftHtml }),
     });
     setSending(false);
     if (!res.ok) {
@@ -120,6 +126,7 @@ export default function InboxPage() {
       direction: "outbound",
       subject: null,
       body: draftText,
+      bodyHtml: draftHtml || null,
       sentAt: new Date().toISOString(),
     };
     const updated: InboxLead = {
@@ -130,6 +137,7 @@ export default function InboxPage() {
     setLeads((prev) => prev.map((l) => (l.id === selected.id ? updated : l)));
     setSelected(updated);
     setDraftText("");
+    setDraftHtml("");
     setAiDraftOriginal("");
     setSentToast(true);
     setTimeout(() => setSentToast(false), 2800);
@@ -151,6 +159,7 @@ export default function InboxPage() {
         return;
       }
       setDraftText(data.draft ?? "");
+      setDraftHtml(plainToHtml(data.draft ?? ""));
       setAiDraftOriginal(data.draft ?? "");
     } catch {
       setSendError("Failed to generate draft");
@@ -289,7 +298,7 @@ export default function InboxPage() {
           {!loading &&
             grouped.map(([group, threads]) => (
               <div key={group}>
-                <div className="px-[18px] pt-3 pb-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-fg-5 sticky top-0 z-[1] bg-gradient-to-b from-sidebar from-60% to-transparent">
+                <div className="px-[18px] pt-3 pb-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-fg-5 sticky top-0 z-0 bg-gradient-to-b from-sidebar from-60% to-transparent">
                   {group}
                 </div>
                 {threads.map((lead) => (
@@ -382,13 +391,15 @@ export default function InboxPage() {
                 borderLeft: isAiDraft ? "2px solid var(--amber)" : "1px solid oklch(0.20 0 0)",
               }}
             >
-              <textarea
-                id="inbox-draft"
-                value={draftText}
-                onChange={(e) => setDraftText(e.target.value)}
+              <RichTextEditor
+                value={draftHtml}
+                onChange={(html, text) => {
+                  setDraftHtml(html);
+                  setDraftText(text);
+                }}
                 placeholder="Write your reply…"
-                rows={5}
-                className="w-full box-border bg-transparent border-0 px-3.5 py-3 text-fg-1 font-mono text-[12.5px] outline-none resize-none leading-[1.65]"
+                editorClassName="min-h-[110px] text-fg-1"
+                className="[&_.rte-content]:bg-transparent"
               />
               <div className="px-3.5 py-2 border-t border-border-soft flex items-center gap-2.5">
                 <span className="ml-auto font-mono text-[10px] text-fg-5">
@@ -505,7 +516,7 @@ function ThreadMessage({ msg }: { msg: Message }) {
         </span>
       </div>
       <div
-        className="px-3.5 py-3 rounded-lg text-fg-2 font-mono text-[12.5px] whitespace-pre-wrap leading-[1.65]"
+        className="px-3.5 py-3 rounded-lg text-fg-2 font-mono text-[12.5px] leading-[1.65]"
         style={{
           background: inbound
             ? "color-mix(in oklch, var(--success) 8%, var(--surface))"
@@ -513,7 +524,7 @@ function ThreadMessage({ msg }: { msg: Message }) {
           borderLeft: inbound ? "2px solid var(--success)" : "2px solid var(--fg-5)",
         }}
       >
-        {msg.body}
+        <RichTextViewer html={msg.bodyHtml} text={msg.body} />
       </div>
     </div>
   );

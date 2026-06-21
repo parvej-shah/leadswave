@@ -11,6 +11,28 @@ Format: one bullet per item, newest on top. Convert relative dates to absolute.
 
 ## Live decisions
 
+- **Rich text: reusable editor + viewer; signature appended at send-time.**
+  `components/rich-text-editor.tsx` (Tiptap v3, `immediatelyRender:false` for SSR) +
+  `components/rich-text-viewer.tsx` are the shared surfaces. HTML sanitized at the WRITE
+  boundary server-side (`lib/html/sanitize.ts`) — viewer does a client allowlist pass as
+  defense-in-depth. `Message.bodyHtml` is ADDITIVE. Signature
+  lives in `Settings.signatureHtml`/`signatureText` (the sender's NAME now goes in the
+  signature, not a separate field) and is appended once via `lib/email/signature.ts`
+  (`buildOutboundEmail`) on REPLIES + FOLLOW-UPS. The signature is PERMANENT — openers get
+  it too, but via `appendOpenerSignature` (plain text + `stripUrls`, no HTML part) so the
+  opener invariant (no links in msg #1) holds; threaded into the graph as
+  `OutreachState.signatureText/Html`. STORAGE: `Message.body`/`bodyHtml` now store the
+  SIGNED text (so the thread shows exactly what was sent); every AI thread-context builder
+  strips it back with `stripSignature` (`lib/html/plain.ts`, cuts at `SIGNATURE_DELIMITER`
+  "\n--\n") — applied in cron follow-ups + inbox warm/classify/draft. `stripUrls` is also in
+  `plain.ts` (pure, client-safe) so the Settings signature PREVIEW (`SignaturePreview`,
+  shows full vs opener-plain side by side) matches the server exactly. Decision (2026-06-21):
+  opener KEEPS stripping links (website URL only shows on replies/follow-ups). Only
+  replies/follow-ups store `bodyHtml`. The lead-detail opener
+  composer stays a plain Textarea (opener body is deliberately plain). WhatsApp uses the
+  editor but sends `getText()` plain (URL can't carry
+  HTML). DB columns added via `prisma db push` (migration history had drifted — do NOT
+  `migrate reset`, it would wipe the Supabase data). (2026-06-21)
 - **Outreach language = country→language map, not a Bangla boolean.**
   `agents/outreach/lib/locale.ts` (`resolveLanguage`) maps `campaign.country` → language;
   local language for non-English-fluent markets (Japan/Portugal/Spain/Brazil/France/…),

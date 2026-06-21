@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Dialog, Textarea, Toast } from "@/components/ui";
+import { Button, Dialog, Toast } from "@/components/ui";
+import { RichTextEditor } from "@/components/rich-text-editor";
+import { plainToHtml } from "@/lib/html/plain";
 
 /**
  * WhatsApp outreach button: generates an offer-aware message for the lead
@@ -22,7 +24,10 @@ export function WhatsAppButton({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  // `message` is the plain text used for the WhatsApp URL/clipboard (WhatsApp
+  // can't render HTML); `messageHtml` drives the editor only.
   const [message, setMessage] = useState("");
+  const [messageHtml, setMessageHtml] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -43,12 +48,15 @@ export function WhatsAppButton({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Failed to generate message");
       setMessage(data.message ?? "");
+      setMessageHtml(plainToHtml(data.message ?? ""));
       if (data.generated === false) {
         setError(`AI unavailable (${data.reason ?? "unknown"}) — this is a template, edit before sending.`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate message");
-      setMessage(`Hi ${companyName} team! Would you be open to a quick chat?`);
+      const fallback = `Hi ${companyName} team! Would you be open to a quick chat?`;
+      setMessage(fallback);
+      setMessageHtml(plainToHtml(fallback));
     } finally {
       setLoading(false);
     }
@@ -115,11 +123,14 @@ export function WhatsAppButton({
           {loading ? (
             <p className="font-mono text-[12px] text-fg-4 m-0">writing message…</p>
           ) : (
-            <Textarea
-              rows={5}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              hint="Edit freely — opens in WhatsApp ready to send."
+            <RichTextEditor
+              minimal
+              value={messageHtml}
+              onChange={(html, text) => {
+                setMessageHtml(html);
+                setMessage(text);
+              }}
+              hint="Edit freely — WhatsApp sends plain text, so formatting is for readability here only."
             />
           )}
         </div>

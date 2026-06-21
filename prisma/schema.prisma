@@ -20,6 +20,7 @@ model Campaign {
   websiteOffer   String?
   crmOffer       String?
   status         String    @default("active") // active | paused | completed
+  autoSend       Boolean   @default(false)
   leads          Lead[]
   createdAt      DateTime  @default(now())
   deletedAt      DateTime?
@@ -62,7 +63,8 @@ model Message {
   leadId    String
   direction String   // outbound | inbound | system
   subject   String?
-  body      String
+  body      String   // canonical plain text: thread previews, AI follow-up context, search
+  bodyHtml  String?  // rich-text rendering (replies/follow-ups); null for plain/AI-generated
   sentAt    DateTime @default(now())
   lead      Lead     @relation(fields: [leadId], references: [id])
 }
@@ -83,6 +85,8 @@ model Settings {
   offerText            String?
   fromEmail            String?
   fromName             String?
+  signatureHtml        String?  // reusable email signature (rich text); appended at send-time
+  signatureText        String?  // plain-text fallback for the text/* part + WhatsApp
   resendApiKey         String?
   firecrawlApiKey      String?
   anthropicApiKey      String?

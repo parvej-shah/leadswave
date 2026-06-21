@@ -18,6 +18,11 @@ const dmMono = DM_Mono({
 export const metadata: Metadata = {
   title: "LeadsWave",
   description: "Outbound on autopilot.",
+  icons: {
+    icon: [{ url: "/favicon.ico", sizes: "any" }],
+    apple: [{ url: "/apple-icon.png", sizes: "1254x1254" }],
+    shortcut: ["/favicon.ico"],
+  },
 };
 
 export default function RootLayout({

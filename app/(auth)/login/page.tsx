@@ -25,11 +25,14 @@ export default function LoginPage() {
 
       <div className="relative w-full max-w-[380px] px-4">
         <div className="mb-8">
-          <div className="flex items-center gap-2 mb-5">
-            <span className="w-2 h-2 rounded-full bg-amber ds-pulse" />
-            <span className="font-mono text-[11px] uppercase tracking-[0.20em] text-amber">
-              LeadsWave
-            </span>
+          <div className="mb-6 flex justify-center">
+            <img
+              src="/logo-transparent.png"
+              alt="LeadsWave"
+              width={2508}
+              height={627}
+              className="h-auto w-[320px] max-w-full"
+            />
           </div>
           <h1 className="ds-serif-welcome m-0 mb-1.5" style={{ fontSize: 32 }}>
             Welcome back.
@@ -49,7 +52,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center font-mono text-[11px] text-fg-5 mt-5">
-          LeadsWave · Outbound on autopilot
+          Find. Enrich. Outreach. Follow up. Close.
         </p>
       </div>
     </div>

@@ -37,6 +37,8 @@ const OutreachAnnotation = Annotation.Root({
   anthropicApiKey: Annotation<string>(),
   fromEmail: Annotation<string>(),
   fromName: Annotation<string>(),
+  signatureText: Annotation<string>(),
+  signatureHtml: Annotation<string>(),
   lead: Annotation<Lead>(),
   campaign: Annotation<Campaign>(),
   websiteSummary: Annotation<string, string>({

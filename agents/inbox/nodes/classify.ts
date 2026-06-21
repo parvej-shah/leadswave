@@ -1,6 +1,7 @@
 import { generateText } from "@/lib/gemini";
 import { CLASSIFY_EXAMPLES } from "@/lib/ai/training/inbox-examples";
 import { InboxState, Classification } from "../graph";
+import { stripSignature } from "@/lib/html/plain";
 
 function buildFewShotExamples(): string {
   return CLASSIFY_EXAMPLES.map((ex, i) =>
@@ -27,7 +28,7 @@ Use the examples below to calibrate your judgment. Then classify the new reply.`
 
 export async function classifyNode(state: InboxState): Promise<Partial<InboxState>> {
   const thread = state.priorMessages
-    .map((m) => `[${m.direction.toUpperCase()}]${m.subject ? ` Subject: ${m.subject}` : ""}\n${m.body}`)
+    .map((m) => `[${m.direction.toUpperCase()}]${m.subject ? ` Subject: ${m.subject}` : ""}\n${stripSignature(m.body)}`)
     .join("\n\n---\n\n");
 
   const newReply = [

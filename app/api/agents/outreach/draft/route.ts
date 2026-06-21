@@ -32,6 +32,8 @@ export async function POST(req: NextRequest) {
       anthropicApiKey: settings.anthropicApiKey ?? "",
       fromEmail: settings.fromEmail,
       fromName: settings.fromName ?? "",
+      signatureText: settings.signatureText ?? "",
+      signatureHtml: settings.signatureHtml ?? "",
       lead: null as never,
       campaign: null as never,
       websiteSummary: "",

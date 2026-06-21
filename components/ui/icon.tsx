@@ -25,6 +25,12 @@ import {
   ArrowUp,
   Archive,
   Reply,
+  Bold,
+  Italic,
+  Strikethrough,
+  List,
+  ListOrdered,
+  Quote,
   type LucideIcon,
 } from "lucide-react";
 
@@ -55,6 +61,12 @@ export const iconMap = {
   arrowUp: ArrowUp,
   archive: Archive,
   reply: Reply,
+  bold: Bold,
+  italic: Italic,
+  strikethrough: Strikethrough,
+  list: List,
+  "list-ordered": ListOrdered,
+  quote: Quote,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof iconMap;

@@ -5,6 +5,7 @@ import { getSystemSettings } from "@/lib/settings";
 import { Resend } from "resend";
 import { scheduleFollowupsNode } from "@/agents/outreach/nodes/schedule_followups";
 import { verifyEmailAddress } from "@/lib/email/verify";
+import { appendOpenerSignature } from "@/lib/email/signature";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -64,11 +65,16 @@ export async function POST(req: NextRequest) {
       ? `${settings.fromName} <${settings.fromEmail}>`
       : settings.fromEmail;
 
-    const { error } = await resend.emails.send({ from, to: lead.email, subject, text: body });
+    // First-touch opener: permanent signature, plain text, links stripped. Send
+    // AND store the signed text so the thread shows what was received; the AI
+    // follow-up prior-context strips the signature off (stripSignature).
+    const sentText = appendOpenerSignature(body, settings.signatureText, settings.signatureHtml);
+
+    const { error } = await resend.emails.send({ from, to: lead.email, subject, text: sentText });
     if (error) throw new Error(`Resend error: ${error.message ?? JSON.stringify(error)}`);
 
     await db.message.create({
-      data: { leadId, direction: "outbound", subject, body },
+      data: { leadId, direction: "outbound", subject, body: sentText },
     });
 
     await db.lead.update({
@@ -84,6 +90,8 @@ export async function POST(req: NextRequest) {
       anthropicApiKey: settings.anthropicApiKey ?? "",
       fromEmail: settings.fromEmail,
       fromName: settings.fromName ?? "",
+      signatureText: settings.signatureText ?? "",
+      signatureHtml: settings.signatureHtml ?? "",
       lead: lead as never,
       campaign: lead.campaign as never,
       websiteSummary: "",

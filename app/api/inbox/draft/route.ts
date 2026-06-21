@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { generateText } from "@/lib/gemini";
+import { stripSignature } from "@/lib/html/plain";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
   const thread = lead.messages
     .filter((m) => m.direction !== "system")
     .slice(-8)
-    .map((m) => `[${m.direction.toUpperCase()}]${m.subject ? ` ${m.subject}` : ""}\n${m.body}`)
+    .map((m) => `[${m.direction.toUpperCase()}]${m.subject ? ` ${m.subject}` : ""}\n${stripSignature(m.body)}`)
     .join("\n\n---\n\n");
 
   const prompt = `You write short, human B2B email replies.

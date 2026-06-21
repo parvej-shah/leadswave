@@ -16,7 +16,7 @@ export async function GET() {
       campaign: { select: { name: true } },
       messages: {
         orderBy: { sentAt: "asc" },
-        select: { id: true, direction: true, subject: true, body: true, sentAt: true },
+        select: { id: true, direction: true, subject: true, body: true, bodyHtml: true, sentAt: true },
       },
     },
   });

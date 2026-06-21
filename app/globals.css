@@ -284,3 +284,37 @@
   scrollbar-width: thin;
   scrollbar-color: oklch(0.30 0 0) transparent;
 }
+
+/* ============================================================
+   Rich-text content — shared by RichTextEditor + RichTextViewer.
+   No typography plugin in this project, so styles are explicit.
+   ============================================================ */
+.rte-content p { margin: 0 0 0.5em; }
+.rte-content p:last-child { margin-bottom: 0; }
+.rte-content strong, .rte-content b { font-weight: 600; color: var(--fg-1, oklch(0.92 0 0)); }
+.rte-content em, .rte-content i { font-style: italic; }
+.rte-content s, .rte-content strike { text-decoration: line-through; }
+.rte-content ul, .rte-content ol { margin: 0.25em 0 0.5em; padding-left: 1.25em; }
+.rte-content ul { list-style: disc; }
+.rte-content ol { list-style: decimal; }
+.rte-content li { margin: 0.15em 0; }
+.rte-content h1 { font-size: 1.15em; font-weight: 600; margin: 0.4em 0 0.3em; }
+.rte-content h2 { font-size: 1.08em; font-weight: 600; margin: 0.4em 0 0.3em; }
+.rte-content h3 { font-size: 1em; font-weight: 600; margin: 0.4em 0 0.3em; }
+.rte-content blockquote {
+  border-left: 2px solid oklch(0.30 0 0);
+  padding-left: 0.75em;
+  margin: 0.4em 0;
+  color: oklch(0.62 0 0);
+}
+.rte-content a { color: oklch(0.72 0.15 85); text-decoration: underline; }
+.rte-content code {
+  background: oklch(0.18 0 0);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  font-size: 0.92em;
+}
+.rte-content hr { border: 0; border-top: 1px solid oklch(0.22 0 0); margin: 0.6em 0; }
+.rte-content:focus { outline: none; }
+.ProseMirror { min-height: 100px; }
+.ProseMirror:focus { outline: none; }

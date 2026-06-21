@@ -3,13 +3,14 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Resend } from "resend";
 import { getSystemSettings } from "@/lib/settings";
+import { buildOutboundEmail } from "@/lib/email/signature";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
 
-  const { leadId, body } = await req.json();
+  const { leadId, body, bodyHtml } = await req.json();
   if (!leadId || !body?.trim())
     return NextResponse.json({ error: "leadId and body required" }, { status: 400 });
 
@@ -38,17 +39,31 @@ export async function POST(req: NextRequest) {
     ? `${settings.fromName} <${settings.fromEmail}>`
     : settings.fromEmail;
 
+  const outbound = buildOutboundEmail({
+    bodyHtml,
+    bodyText: body,
+    signatureHtml: settings.signatureHtml,
+    signatureText: settings.signatureText,
+  });
+
   const { error } = await resend.emails.send({
     from,
     to: lead.email,
     subject,
-    text: body.trim(),
+    html: outbound.html,
+    text: outbound.text,
   });
 
   if (error) return NextResponse.json({ error: error.message ?? "Send failed" }, { status: 502 });
 
   await db.message.create({
-    data: { leadId, direction: "outbound", subject, body: body.trim() },
+    data: {
+      leadId,
+      direction: "outbound",
+      subject,
+      body: outbound.bodyText,
+      bodyHtml: outbound.bodyHtml,
+    },
   });
 
   await db.lead.update({
