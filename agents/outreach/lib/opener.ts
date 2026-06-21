@@ -132,7 +132,8 @@ Write a short opener email. Rules:
   pricing, or our offer.
 - Body: 2-3 short sentences, max ~70 words, following the body opening above.
 ${SHARED_RULES}
-- Sign off as: ${ctx.fromName || "The team"}
+- Do NOT include a sign-off or sender name — the signature is appended separately.
+- Use correct grammar, spelling, and punctuation throughout — no typos, no missing articles, no broken sentences.
 ${languageRule(opts.language)}
 
 Tone reference only — DO NOT reuse this wording, structure, or phrasing; it is a register
@@ -181,6 +182,7 @@ ${framing}
 Hard rules:
 - Vary the wording and sentence shape from the prior messages above — this must not read like a templated bump.
 - No links/URLs, no "book a call"/meeting CTA, no pricing, no hype.
+- Use correct grammar, spelling, and punctuation throughout.
 - Plain text only, no greeting, no sign-off.`;
 }
 

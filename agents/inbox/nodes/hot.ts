@@ -164,6 +164,7 @@ async function proposeSlots(
 
   const draftPrompt = `You are a B2B sales rep. The lead wants to meet.
 Propose these 3 time slots in a friendly 2-sentence message. Be warm and concise.
+Use correct grammar, spelling, and punctuation throughout.
 Company: ${state.lead.companyName}
 Slots:\n${slotList}
 Return ONLY the email body — no subject, no sign-off.`;

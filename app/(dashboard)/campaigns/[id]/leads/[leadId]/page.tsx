@@ -10,11 +10,11 @@ import {
   CategoryBadge,
   Icon,
   StateBadge,
-  Textarea,
   Toast,
   Input,
 } from "@/components/ui";
 import { WhatsAppButton } from "@/components/whatsapp-button";
+import { RichTextEditor } from "@/components/rich-text-editor";
 import { RichTextViewer } from "@/components/rich-text-viewer";
 
 type Message = {
@@ -99,13 +99,22 @@ export default function LeadDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ leadId }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: Record<string, string>;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        setGenError("Invalid response from server");
+        return;
+      }
       if (!res.ok) {
         setGenError(data.error ?? "Failed to generate email");
         return;
       }
       setComposeSubject(data.subject ?? "");
-      setComposeBody(data.body ?? "");
+      const raw = data.body ?? "";
+      const html = raw.includes("<") ? raw : raw.split(/\n{2,}/).map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`).join("");
+      setComposeBody(html);
     } finally {
       setGenerating(false);
     }
@@ -131,12 +140,12 @@ export default function LeadDetailPage() {
         return;
       }
       setSentOk(true);
-      // Add the sent message optimistically
       const newMsg: Message = {
         id: `optimistic-${Date.now()}`,
         direction: "outbound",
         subject: composeSubject,
-        body: composeBody,
+        body: composeBody.replace(/<[^>]*>/g, ""),
+        bodyHtml: composeBody,
         sentAt: new Date().toISOString(),
       };
       setLead((prev) =>
@@ -390,17 +399,15 @@ export default function LeadDetailPage() {
                   }}
                   disabled={sending}
                 />
-                <Textarea
+                <RichTextEditor
                   label="Body"
-                  rows={6}
                   placeholder="Write your message here, or click Generate Message to draft with AI…"
                   value={composeBody}
-                  onChange={(e) => {
+                  onChange={(html) => {
                     setSentOk(false);
-                    setComposeBody(e.target.value);
+                    setComposeBody(html);
                   }}
-                  disabled={sending}
-                  hint="First-touch openers send as plain text to protect deliverability — your signature is appended automatically (links removed for the first email). Replies in the inbox support rich text."
+                  hint="Your signature is appended automatically."
                 />
 
                 {genError && <Toast kind="hot" pill="ERROR">{genError}</Toast>}
@@ -518,8 +525,7 @@ function MessageBubble({ message }: { message: Message }) {
           <p className="font-mono text-[11px] text-fg-3 m-0 font-medium">{message.subject}</p>
         )}
         <RichTextViewer
-          html={message.bodyHtml}
-          text={message.body}
+          html={message.bodyHtml || message.body}
           className="font-mono text-[11.5px] text-fg-2 leading-relaxed"
         />
       </div>

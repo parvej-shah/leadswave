@@ -51,6 +51,7 @@ Rules:
 - Friendly and confident, not robotic.
 - If they seem ready, suggest next-step confirmation.
 - No overpromising or fake claims.
+- Use correct grammar, spelling, and punctuation throughout.
 - No signature.`;
 
   try {

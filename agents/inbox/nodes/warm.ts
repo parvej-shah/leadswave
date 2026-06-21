@@ -21,6 +21,7 @@ export async function warmNode(state: InboxState): Promise<Partial<InboxState>> 
 
   const prompt = `You are drafting a brief, warm follow-up reply on behalf of a B2B sales rep.
 Write 2-3 sentences. Be helpful, not salesy. Match the tone of their reply.
+Use correct grammar, spelling, and punctuation throughout.
 Return ONLY the email body text — no subject, no greeting/sign-off needed.
 
 Company: ${state.lead.companyName}
