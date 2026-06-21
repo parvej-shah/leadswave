@@ -170,7 +170,8 @@ export async function POST(req: NextRequest) {
     campaignResults.push({ campaignId: campaign.id, sent: sentThisRun, remaining });
   }
 
-  if (settings.telegramChatId && (totalProcessed > 0 || totalFailed > 0)) {
+  const silent = req.nextUrl.searchParams.get("silent") === "true";
+  if (!silent && settings.telegramChatId && (totalProcessed > 0 || totalFailed > 0)) {
     const lines = [
       `📤 <b>Auto-Send Summary</b>`,
       `Sent: ${totalProcessed} | Failed: ${totalFailed}`,
@@ -188,6 +189,7 @@ export async function POST(req: NextRequest) {
     processed: totalProcessed,
     failed: totalFailed,
     campaigns: campaignResults,
+    telegramChatId: settings.telegramChatId || null,
   });
 }
 

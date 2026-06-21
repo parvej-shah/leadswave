@@ -14,28 +14,103 @@ jobs:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
+          TOTAL_SENT=0
+          TOTAL_FAILED=0
+          CHAT_ID=""
+          # Collect all JSON responses
+          echo "[]" > /tmp/all_responses.json
+
           for i in 1 2 3 4; do
             echo "=== Batch $i ==="
             HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
-              -X POST "$APP_URL/api/cron/auto-send" \
+              -X POST "$APP_URL/api/cron/auto-send?silent=true" \
               -H "Authorization: Bearer $CRON_SECRET" \
               -H "Content-Type: application/json" \
               --max-time 120)
             cat /tmp/response.json
             echo ""
+
             if [ "$HTTP_CODE" -ne 200 ]; then
               echo "Request failed with HTTP $HTTP_CODE"
-              exit 1
+              break
             fi
-            # Check if anything was processed
-            PROCESSED=$(cat /tmp/response.json | python3 -c "import sys,json; print(json.load(sys.stdin).get('processed',0))" 2>/dev/null || echo "0")
+
+            # Append response to collection
+            python3 -c "
+          import json
+          with open('/tmp/all_responses.json') as f: arr = json.load(f)
+          with open('/tmp/response.json') as f: arr.append(json.load(f))
+          with open('/tmp/all_responses.json','w') as f: json.dump(arr, f)
+          "
+
+            PROCESSED=$(python3 -c "import sys,json; print(json.load(sys.stdin).get('processed',0))" < /tmp/response.json 2>/dev/null || echo "0")
+            TOTAL_SENT=$((TOTAL_SENT + PROCESSED))
+
             if [ "$PROCESSED" -eq 0 ]; then
               echo "Nothing left to send, stopping."
               break
             fi
-            # Wait 2 minutes before next batch (skip after last)
+
             if [ "$i" -lt 4 ]; then
               echo "Waiting 2 minutes before next batch..."
               sleep 120
             fi
           done
+
+          echo "=== Final: sent=$TOTAL_SENT ==="
+
+          # Build and send one combined Telegram notification
+          python3 << 'PYEOF'
+          import json, urllib.request, os
+
+          with open("/tmp/all_responses.json") as f:
+              responses = json.load(f)
+
+          if not responses:
+              exit(0)
+
+          total_sent = sum(r.get("processed", 0) for r in responses)
+          total_failed = sum(r.get("failed", 0) for r in responses)
+          chat_id = next((r.get("telegramChatId") for r in responses if r.get("telegramChatId")), None)
+
+          if not chat_id or (total_sent + total_failed) == 0:
+              print("No notification needed")
+              exit(0)
+
+          # Merge campaign results (last response has final remaining counts)
+          campaigns = {}
+          for r in responses:
+              for c in r.get("campaigns", []):
+                  cid = c["campaignId"]
+                  if cid not in campaigns:
+                      campaigns[cid] = {"sent": 0, "remaining": c["remaining"]}
+                  campaigns[cid]["sent"] += c["sent"]
+                  campaigns[cid]["remaining"] = c["remaining"]
+
+          lines = [
+              "\U0001f4e4 <b>Auto-Send Summary</b>",
+              f"Sent: {total_sent} | Failed: {total_failed}",
+          ]
+          for cid, info in campaigns.items():
+              rem = f"{info['remaining']} remaining" if info["remaining"] >= 0 else "daily cap reached"
+              lines.append(f"• {cid[:12]}: {info['sent']} sent, {rem}")
+
+          message = "\n".join(lines)
+          payload = json.dumps({"chatId": chat_id, "message": message})
+
+          app_url = os.environ["APP_URL"]
+          cron_secret = os.environ["CRON_SECRET"]
+          req = urllib.request.Request(
+              f"{app_url}/api/cron/auto-send/notify",
+              data=payload.encode(),
+              headers={
+                  "Authorization": f"Bearer {cron_secret}",
+                  "Content-Type": "application/json",
+              },
+          )
+          try:
+              urllib.request.urlopen(req, timeout=30)
+              print(f"Telegram notification sent: {total_sent} sent, {total_failed} failed")
+          except Exception as e:
+              print(f"Telegram notification failed: {e}")
+          PYEOF
