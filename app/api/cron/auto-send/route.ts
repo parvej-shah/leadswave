@@ -4,8 +4,7 @@ import { getSystemSettings } from "@/lib/settings";
 import { outreachGraph } from "@/agents/outreach/graph";
 import { sendTelegramMessage, escapeHtml } from "@/lib/telegram";
 
-const COOLDOWN_MS = 120_000; // 2 minutes between sends
-const MAX_PER_RUN = 4; // max leads processed per campaign per cron invocation
+const MAX_PER_RUN = 1; // one lead per invocation — the GH Actions workflow loops with spacing
 
 function isAuthorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
@@ -126,11 +125,6 @@ export async function POST(req: NextRequest) {
 
     for (let i = 0; i < sendableLeads.length; i++) {
       const lead = sendableLeads[i];
-
-      // Cooldown between sends (skip before the first one)
-      if (i > 0) {
-        await new Promise((r) => setTimeout(r, COOLDOWN_MS));
-      }
 
       try {
         await outreachGraph.invoke({

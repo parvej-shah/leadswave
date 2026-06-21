@@ -10,8 +10,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger auto-send cron
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl -sf -X POST "${{ secrets.APP_URL }}/api/cron/auto-send" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            -H "Content-Type: application/json" \
-            --max-time 540
+          for i in 1 2 3 4; do
+            echo "=== Batch $i ==="
+            HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+              -X POST "$APP_URL/api/cron/auto-send" \
+              -H "Authorization: Bearer $CRON_SECRET" \
+              -H "Content-Type: application/json" \
+              --max-time 120)
+            cat /tmp/response.json
+            echo ""
+            if [ "$HTTP_CODE" -ne 200 ]; then
+              echo "Request failed with HTTP $HTTP_CODE"
+              exit 1
+            fi
+            # Check if anything was processed
+            PROCESSED=$(cat /tmp/response.json | python3 -c "import sys,json; print(json.load(sys.stdin).get('processed',0))" 2>/dev/null || echo "0")
+            if [ "$PROCESSED" -eq 0 ]; then
+              echo "Nothing left to send, stopping."
+              break
+            fi
+            # Wait 2 minutes before next batch (skip after last)
+            if [ "$i" -lt 4 ]; then
+              echo "Waiting 2 minutes before next batch..."
+              sleep 120
+            fi
+          done
