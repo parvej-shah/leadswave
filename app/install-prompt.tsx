@@ -87,64 +87,65 @@ export function InstallPrompt() {
     <div
       role="dialog"
       aria-label="Install LeadsWave"
-      className="fixed inset-x-3 z-[60] bottom-[calc(56px+env(safe-area-inset-bottom)+12px)] lg:inset-x-auto lg:right-4 lg:bottom-4 lg:w-80 ds-fade-in"
+      className="fixed inset-x-3 z-[60] bottom-[calc(56px+env(safe-area-inset-bottom)+16px)] lg:inset-x-auto lg:right-4 lg:bottom-4 lg:w-80 max-w-[calc(100vw-24px)] mx-auto lg:mx-0 ds-fade-in"
     >
-      <div className="bg-sidebar border border-border rounded-xl shadow-2xl shadow-black/40 p-3.5 flex items-start gap-3">
-        <div className="w-9 h-9 shrink-0 rounded-lg bg-amber-bg border border-amber-border flex items-center justify-center">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber ds-pulse" />
-        </div>
-        <div className="flex flex-col gap-1 min-w-0 flex-1">
-          <p className="font-sans text-[13px] font-semibold text-fg-1 m-0">
-            Install LeadsWave
-          </p>
-          {isIOS ? (
-            <p className="font-mono text-[11px] text-fg-4 m-0 leading-relaxed">
-              Tap the Share button{" "}
-              <span aria-hidden className="text-fg-2">
-                ⎋
-              </span>{" "}
-              then <span className="text-fg-2">Add to Home Screen</span>.
+      <div className="bg-sidebar border border-border rounded-xl shadow-2xl shadow-black/40 p-4 flex flex-col gap-3">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 shrink-0 rounded-lg bg-amber-bg border border-amber-border flex items-center justify-center">
+            <span className="w-2 h-2 rounded-full bg-amber ds-pulse" />
+          </div>
+          <div className="flex flex-col gap-1 min-w-0 flex-1">
+            <p className="font-sans text-[14px] font-semibold text-fg-1 m-0 leading-tight">
+              Install LeadsWave
             </p>
-          ) : (
-            <p className="font-mono text-[11px] text-fg-4 m-0 leading-relaxed">
-              Add it to your home screen for a faster, full-screen app
-              experience.
-            </p>
-          )}
-          {!isIOS && (
-            <div className="flex items-center gap-2 mt-1.5">
-              <button
-                type="button"
-                onClick={install}
-                className="font-mono text-[11px] text-canvas bg-amber hover:bg-amber-hover rounded-md px-3 py-1.5 font-medium transition-colors cursor-pointer"
-              >
-                Install
-              </button>
-              <button
-                type="button"
-                onClick={dismiss}
-                className="font-mono text-[11px] text-fg-4 hover:text-fg-2 px-2 py-1.5 transition-colors cursor-pointer"
-              >
-                Not now
-              </button>
-            </div>
-          )}
+            {isIOS ? (
+              <p className="font-mono text-[12px] text-fg-4 m-0 leading-relaxed">
+                Tap the Share button{" "}
+                <span aria-hidden className="text-fg-2">
+                  ⎋
+                </span>{" "}
+                then <span className="text-fg-2">Add to Home Screen</span>.
+              </p>
+            ) : (
+              <p className="font-mono text-[12px] text-fg-4 m-0 leading-relaxed">
+                Add it to your home screen for a faster, full-screen app.
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={dismiss}
+            aria-label="Dismiss"
+            className="shrink-0 w-8 h-8 -mt-1 -mr-1 flex items-center justify-center text-fg-5 hover:text-fg-2 transition-colors cursor-pointer"
+          >
+            <svg width="15" height="15" viewBox="0 0 14 14" fill="none">
+              <path
+                d="M3.5 3.5l7 7M10.5 3.5l-7 7"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={dismiss}
-          aria-label="Dismiss"
-          className="shrink-0 text-fg-5 hover:text-fg-2 -mt-0.5 -mr-0.5 p-1 transition-colors cursor-pointer"
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path
-              d="M3.5 3.5l7 7M10.5 3.5l-7 7"
-              stroke="currentColor"
-              strokeWidth="1.4"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
+        {!isIOS && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={install}
+              className="flex-1 min-h-[40px] font-mono text-[13px] text-canvas bg-amber hover:bg-amber-hover rounded-md px-4 font-medium transition-colors cursor-pointer"
+            >
+              Install
+            </button>
+            <button
+              type="button"
+              onClick={dismiss}
+              className="min-h-[40px] font-mono text-[13px] text-fg-4 hover:text-fg-2 px-4 transition-colors cursor-pointer"
+            >
+              Not now
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
