@@ -7,6 +7,10 @@ import {
   Badge,
   Button,
   CategoryBadge,
+  DataCard,
+  DataCardActions,
+  DataCardMeta,
+  DataCardTitle,
   Dialog,
   EmptyState,
   FilterChip,
@@ -375,14 +379,16 @@ export default function LeadsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Segmented
-            value={density}
-            onChange={setDensity}
-            options={[
-              { value: "comfortable", label: "Cozy" },
-              { value: "compact", label: "Dense" },
-            ]}
-          />
+          <div className="hidden md:block">
+            <Segmented
+              value={density}
+              onChange={setDensity}
+              options={[
+                { value: "comfortable", label: "Cozy" },
+                { value: "compact", label: "Dense" },
+              ]}
+            />
+          </div>
           <Link href="/campaigns/new">
             <Button iconStart="plus">New Campaign</Button>
           </Link>
@@ -464,8 +470,8 @@ export default function LeadsPage() {
 
       {/* Search + filter row */}
       {!loading && leads.length > 0 && (
-        <div className="flex items-center gap-3 px-3.5 py-2.5 bg-surface border border-border rounded-lg">
-          <div className="flex-1 max-w-[360px]">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-3.5 py-2.5 bg-surface border border-border rounded-lg">
+          <div className="flex-1 sm:max-w-[360px]">
             <Input
               iconStart="search"
               placeholder="Search by company, email, website…"
@@ -474,12 +480,12 @@ export default function LeadsPage() {
               onClear={() => setSearchQuery("")}
             />
           </div>
-          <div className="ml-auto flex items-center gap-2.5">
-            <Icon name="filter" size={14} className="text-fg-4" />
+          <div className="sm:ml-auto flex items-center gap-2.5">
+            <Icon name="filter" size={14} className="text-fg-4 shrink-0" />
             <Select
               value={campaignFilter}
               onChange={(e) => setCampaignFilter(e.target.value)}
-              className="min-w-[180px]"
+              className="flex-1 sm:flex-none sm:min-w-[180px]"
             >
               <option value="all">All Campaigns</option>
               {campaigns.map((c) => (
@@ -525,9 +531,9 @@ export default function LeadsPage() {
         </EmptyState>
       )}
 
-      {/* Table */}
+      {/* Table — desktop / tablet (md+) */}
       {!loading && leads.length > 0 && (
-        <div className="bg-surface border border-border rounded-lg overflow-hidden">
+        <div className="hidden md:block bg-surface border border-border rounded-lg overflow-hidden">
           {/* Header row */}
           <div
             className="grid border-b border-border bg-[oklch(0.115_0_0)] sticky top-0 z-0"
@@ -568,6 +574,40 @@ export default function LeadsPage() {
                 density={density}
                 rowPad={rowPad}
                 gridCols={gridCols}
+                selected={selection.has(lead.id)}
+                onToggle={() => toggle(lead.id)}
+                onEdit={() => {
+                  setEditingLead(lead);
+                  setEditForm({
+                    companyName: lead.companyName,
+                    email: lead.email || "",
+                    website: lead.website || "",
+                    state: lead.state,
+                  });
+                  setUpdateError(null);
+                }}
+                onDelete={() => setDeletingLead(lead)}
+                onSend={() => handleSend(lead.id)}
+                onScript={() => openScript(lead)}
+                sending={sending === lead.id}
+                removing={removing === lead.id}
+                sendError={sendError?.id === lead.id ? sendError.msg : null}
+              />
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Cards — mobile (below md) */}
+      {!loading && leads.length > 0 && (
+        <div className="md:hidden flex flex-col gap-2.5">
+          {filtered.length === 0 ? (
+            <EmptyState>No leads match the current search query or filters.</EmptyState>
+          ) : (
+            filtered.map((lead) => (
+              <LeadCard
+                key={lead.id}
+                lead={lead}
                 selected={selection.has(lead.id)}
                 onToggle={() => toggle(lead.id)}
                 onEdit={() => {
@@ -1026,5 +1066,157 @@ function LeadRow({
         )}
       </div>
     </div>
+  );
+}
+
+// Mobile card variant of LeadRow — same data & handlers, stacked layout.
+function LeadCard({
+  lead,
+  selected,
+  onToggle,
+  onEdit,
+  onDelete,
+  onSend,
+  onScript,
+  sending,
+  removing,
+  sendError,
+}: {
+  lead: Lead;
+  selected: boolean;
+  onToggle: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onSend: () => void;
+  onScript: () => void;
+  sending: boolean;
+  removing: boolean;
+  sendError: string | null;
+}) {
+  const msgs = lead._count.messages;
+  const alreadySent = SENT_STATES.has(lead.state);
+  const lastTouched = relativeTime(lead.updatedAt ?? lead.createdAt);
+  const phoneOnly = !lead.email && !!lead.phone;
+  const verifyMark =
+    lead.email && lead.emailStatus === "verified" ? " ✓"
+    : lead.email && lead.emailStatus === "catch_all" ? " ~"
+    : "";
+  const subtitle =
+    (lead.email ? lead.email + verifyMark : "") ||
+    lead.phone ||
+    (lead.website ? truncateUrl(lead.website) : "");
+
+  return (
+    <DataCard selected={selected}>
+      <DataCardTitle
+        trailing={<StateBadge state={lead.state} />}
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <button
+            type="button"
+            onClick={onToggle}
+            className="shrink-0"
+            aria-label={selected ? "Deselect lead" : "Select lead"}
+          >
+            <Checkbox checked={selected} onChange={onToggle} />
+          </button>
+          <Avatar name={lead.companyName} size={26} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <p className="font-sans text-[14px] text-fg-1 m-0 leading-tight font-medium tracking-[-0.01em] truncate">
+                {lead.companyName}
+              </p>
+              <CategoryBadge category={lead.category} size="sm" />
+            </div>
+            {subtitle && (
+              <p className="font-mono text-[11px] text-fg-4 m-0 mt-0.5 truncate">{subtitle}</p>
+            )}
+          </div>
+        </div>
+      </DataCardTitle>
+
+      <DataCardMeta>
+        <span className="truncate">{lead.campaign.name}</span>
+        <span className="text-fg-5">·</span>
+        <span>{lastTouched}</span>
+        <span className="text-fg-5">·</span>
+        <span style={{ color: msgs > 0 ? "var(--amber)" : undefined }}>{msgs} msgs</span>
+        {lead.website && (
+          <>
+            <span className="text-fg-5">·</span>
+            <a
+              href={lead.website}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-info hover:text-fg-1 truncate"
+            >
+              {truncateUrl(lead.website)}
+            </a>
+          </>
+        )}
+      </DataCardMeta>
+
+      <DataCardActions>
+        {lead.email ? (
+          <Button
+            size="sm"
+            variant="tinted"
+            onClick={onSend}
+            disabled={sending || alreadySent}
+            title={alreadySent ? `Already ${lead.state}` : "Send personalized email"}
+          >
+            {sending ? "Sending…" : "Send"}
+          </Button>
+        ) : phoneOnly ? (
+          <>
+            <Button size="sm" variant="tinted" onClick={onScript} title="Generate a call script">
+              Script
+            </Button>
+            <WhatsAppButton
+              leadId={lead.id}
+              phone={lead.phone!}
+              companyName={lead.companyName}
+            />
+          </>
+        ) : lead.hasContactForm && lead.website ? (
+          <a
+            href={lead.website}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-[12px] text-info hover:underline px-2 py-1"
+          >
+            Contact form →
+          </a>
+        ) : lead.facebookUrl ? (
+          <a
+            href={lead.facebookUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-[12px] text-info hover:underline px-2 py-1"
+          >
+            Facebook →
+          </a>
+        ) : (
+          <Button size="sm" variant="tinted" disabled title="No contact info">
+            Send
+          </Button>
+        )}
+        <span className="flex-1" />
+        <Button size="sm" variant="ghost" iconStart="pencil" onClick={onEdit}>
+          Edit
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          iconStart="x"
+          onClick={onDelete}
+          disabled={removing}
+          title="Remove lead"
+        />
+      </DataCardActions>
+      {sendError && (
+        <p className="font-mono text-[11px] text-hot leading-none m-0">{sendError}</p>
+      )}
+    </DataCard>
   );
 }

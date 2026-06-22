@@ -14,6 +14,7 @@ import {
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { RichTextViewer } from "@/components/rich-text-viewer";
 import { plainToHtml } from "@/lib/html/plain";
+import { cn } from "@/lib/utils";
 
 type Message = {
   id: string;
@@ -247,9 +248,14 @@ export default function InboxPage() {
   }, [selectLead, handleNotInterested]);
 
   return (
-    <div className="flex h-[calc(100vh-48px)] -m-6 overflow-hidden">
+    <div className="flex h-[calc(100dvh-48px-56px)] lg:h-[calc(100vh-48px)] -m-4 -mb-20 lg:-m-6 overflow-hidden">
       {/* ── LIST PANEL ── */}
-      <div className="w-80 shrink-0 flex flex-col border-r border-border bg-sidebar">
+      <div
+        className={cn(
+          "w-full lg:w-80 shrink-0 flex-col border-r border-border bg-sidebar",
+          selected ? "hidden lg:flex" : "flex"
+        )}
+      >
         {/* List header */}
         <div className="px-[18px] pt-3.5 pb-3 border-b border-border bg-[oklch(0.105_0_0)] flex flex-col gap-3 shrink-0">
           <div className="flex items-center justify-between">
@@ -314,7 +320,7 @@ export default function InboxPage() {
         </div>
 
         {/* Keyboard hint footer */}
-        <div className="shrink-0 border-t border-border px-4.5 py-2 flex items-center gap-3 flex-wrap">
+        <div className="shrink-0 border-t border-border px-4.5 py-2 hidden lg:flex items-center gap-3 flex-wrap">
           {([ ["J", "next"], ["K", "prev"], ["R", "reply"], ["E", "archive"] ] as const).map(([key, hint]) => (
             <span key={key} className="flex items-center gap-1 font-mono text-[10px] text-fg-5">
               <Kbd>{key}</Kbd>
@@ -326,7 +332,7 @@ export default function InboxPage() {
 
       {/* ── DETAIL PANEL ── */}
       {!selected ? (
-        <div className="flex-1 flex items-center justify-center bg-canvas">
+        <div className="flex-1 hidden lg:flex items-center justify-center bg-canvas">
           <p className="font-mono text-[12px] text-fg-5">
             Select a thread to read and reply
           </p>
@@ -334,8 +340,16 @@ export default function InboxPage() {
       ) : (
         <div className="flex-1 flex flex-col overflow-hidden bg-canvas min-w-0">
           {/* Detail header */}
-          <div className="px-6 py-3.5 border-b border-border bg-[oklch(0.105_0_0)] flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-3 min-w-0">
+          <div className="px-4 lg:px-6 py-3.5 border-b border-border bg-[oklch(0.105_0_0)] flex items-center justify-between gap-2 shrink-0">
+            <div className="flex items-center gap-2 lg:gap-3 min-w-0">
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                className="lg:hidden shrink-0 w-8 h-8 -ml-1 flex items-center justify-center text-fg-3 hover:text-fg-1 rounded-md hover:bg-[oklch(0.13_0_0)] transition-colors"
+                aria-label="Back to inbox"
+              >
+                <Icon name="arrow" size={16} className="rotate-180" />
+              </button>
               <Avatar name={selected.companyName} size={32} />
               <div className="flex flex-col gap-0.5 min-w-0">
                 <div className="flex items-center gap-2">
@@ -364,7 +378,7 @@ export default function InboxPage() {
           </div>
 
           {/* Thread body */}
-          <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
+          <div className="flex-1 overflow-y-auto px-4 lg:px-6 py-5 flex flex-col gap-4">
             {selected.messages
               .filter((m) => m.direction !== "system")
               .filter((m) => (m.body ?? "").trim().length > 0)
@@ -374,7 +388,7 @@ export default function InboxPage() {
           </div>
 
           {/* Composer */}
-          <div className="border-t border-border bg-[oklch(0.105_0_0)] px-6 py-3.5 flex flex-col gap-2.5 shrink-0">
+          <div className="border-t border-border bg-[oklch(0.105_0_0)] px-4 lg:px-6 py-3.5 flex flex-col gap-2.5 shrink-0">
             {isAiDraft && (
               <div className="flex items-center gap-2">
                 <span className="w-1 h-3.5 bg-amber rounded-sm" />
@@ -414,7 +428,7 @@ export default function InboxPage() {
               </Toast>
             )}
 
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
               {sentToast ? (
                 <Toast kind="success" pill="SENT">
                   Reply sent to {selected.companyName}
@@ -422,7 +436,7 @@ export default function InboxPage() {
               ) : (
                 <span />
               )}
-              <div className="flex gap-2">
+              <div className="flex gap-2 ml-auto">
                 <Button
                   variant="info"
                   iconStart="sparkle"

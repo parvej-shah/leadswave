@@ -46,28 +46,28 @@ export function Dialog({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full bg-sidebar border border-border rounded-xl ds-scale-up"
+        className="w-full bg-sidebar border border-border rounded-xl ds-scale-up flex flex-col max-h-[90dvh]"
         style={{ maxWidth: `${width}px` }}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <div className="flex items-center gap-2.5">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
             <span
-              className="w-1.5 h-1.5 rounded-full ds-pulse"
+              className="w-1.5 h-1.5 rounded-full ds-pulse shrink-0"
               style={{ background: dotColor }}
             />
-            <span className="font-mono text-[13px] text-fg-1 font-medium">{title}</span>
+            <span className="font-mono text-[13px] text-fg-1 font-medium truncate">{title}</span>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="bg-transparent border-0 text-fg-4 hover:text-fg-2 cursor-pointer p-1 flex"
+            className="bg-transparent border-0 text-fg-4 hover:text-fg-2 cursor-pointer p-1 flex shrink-0"
           >
             <Icon name="x" size={16} />
           </button>
         </div>
-        <div className="p-5">{children}</div>
+        <div className="p-5 overflow-y-auto">{children}</div>
         {footer && (
-          <div className="px-5 py-3.5 border-t border-border flex justify-end gap-2.5">
+          <div className="px-5 py-3.5 border-t border-border flex justify-end gap-2.5 shrink-0">
             {footer}
           </div>
         )}

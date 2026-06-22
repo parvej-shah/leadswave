@@ -4,24 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Avatar, Button, Dialog, Icon, Kbd, type IconName } from "@/components/ui";
+import { Avatar, Button, Dialog, Icon, Kbd } from "@/components/ui";
 import { cn } from "@/lib/utils";
-
-type NavItem = {
-  href: string;
-  label: string;
-  icon: IconName;
-  kbd: string;
-  match: (pathname: string) => boolean;
-};
-
-const NAV: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: "home", kbd: "G D", match: (p) => p === "/" },
-  { href: "/campaigns", label: "Campaigns", icon: "target", kbd: "G C", match: (p) => p.startsWith("/campaigns") },
-  { href: "/leads", label: "Leads", icon: "users", kbd: "G L", match: (p) => p.startsWith("/leads") },
-  { href: "/inbox", label: "Inbox", icon: "inbox", kbd: "G I", match: (p) => p.startsWith("/inbox") },
-  { href: "/settings", label: "Settings", icon: "settings", kbd: "G S", match: (p) => p.startsWith("/settings") },
-];
+import { NAV, type NavItem } from "./nav-items";
 
 const STORAGE_KEY = "lw:sidebar-collapsed";
 
@@ -117,7 +102,7 @@ export function Sidebar({ userEmail, userName, campaigns, inboxHotCount }: Sideb
   return (
     <aside
       className={cn(
-        "shrink-0 bg-sidebar border-r border-border flex flex-col gap-2.5 h-screen sticky top-0 transition-[width] duration-200 ease-out",
+        "shrink-0 bg-sidebar border-r border-border hidden lg:flex flex-col gap-2.5 h-screen sticky top-0 transition-[width] duration-200 ease-out",
         c ? "w-14 px-2 py-3" : "w-56 p-3"
       )}
     >

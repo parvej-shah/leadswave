@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Sidebar, type SidebarCampaign } from "./sidebar";
+import { MobileTabBar } from "./mobile-tab-bar";
+import { MobileTopBar } from "./mobile-top-bar";
 import { CommandPalette } from "./command-palette";
 
 export default async function DashboardLayout({
@@ -39,7 +41,13 @@ export default async function DashboardLayout({
         campaigns={campaigns}
         inboxHotCount={inboxHotCount}
       />
-      <main className="flex-1 p-6 overflow-auto min-w-0">{children}</main>
+      <div className="flex-1 flex flex-col min-w-0">
+        <MobileTopBar />
+        <main className="flex-1 p-4 md:p-6 pb-20 lg:pb-6 overflow-auto min-w-0">
+          {children}
+        </main>
+      </div>
+      <MobileTabBar inboxHotCount={inboxHotCount} />
       <CommandPalette campaigns={campaigns.map((c) => ({ id: c.id, name: c.name }))} />
     </div>
   );

@@ -72,7 +72,7 @@ export default async function CampaignsPage({
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <h1 className="ds-h1 m-0 mb-1">Campaigns</h1>
           <p className="font-mono text-[12px] text-fg-4 m-0">
@@ -81,7 +81,7 @@ export default async function CampaignsPage({
             <span className="text-success">{totals.replies}</span> replies
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center flex-wrap gap-2">
           <StatusFilter current={filter} />
           <Link href="/campaigns/new">
             <Button iconStart="plus">New Campaign</Button>

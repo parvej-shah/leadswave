@@ -365,7 +365,7 @@ export default function CampaignScoutPage() {
       {/* City picker — shown for campaigns with no saved cities */}
       {phase === "pick-cities" && (
         <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="font-mono text-[12px] text-fg-3 m-0">
               Top cities for <span className="text-fg-1">{campaign?.businessType}</span> in{" "}
               <span className="text-fg-1">{campaign?.country}</span>
@@ -436,7 +436,7 @@ export default function CampaignScoutPage() {
       {/* Review */}
       {phase === "review" && (
         <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="font-mono text-[12px] text-fg-3 m-0">
               <span className="text-fg-1 font-medium">{leads.length}</span> leads found —{" "}
               <span className="text-amber">{selected.size}</span> selected

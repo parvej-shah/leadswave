@@ -245,7 +245,7 @@ export default async function DashboardPage({
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <h1 className="ds-h1 m-0 mb-1.5">Dashboard</h1>
           <p className="font-mono text-[12px] text-fg-4 m-0 flex items-center gap-2">
@@ -255,7 +255,7 @@ export default async function DashboardPage({
             </span>
           </p>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center flex-wrap gap-2.5">
           <DashboardPeriodSwitcher />
           <RunFollowupsButton />
           <Link href="/campaigns/new">
@@ -268,14 +268,14 @@ export default async function DashboardPage({
       {attentionItems.length > 0 && <NeedsAttention items={attentionItems} />}
 
       {/* KPI strip */}
-      <div className="grid grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {kpis.map((k) => (
           <KPI key={k.label} {...k} />
         ))}
       </div>
 
       {/* Body grid */}
-      <div className="grid grid-cols-[1.6fr_1fr] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-4">
         {/* Campaign Health */}
         <Card>
           <CardHeader
@@ -301,7 +301,8 @@ export default async function DashboardPage({
               </EmptyState>
             </div>
           ) : (
-            <table className="w-full border-collapse">
+            <>
+            <table className="hidden md:table w-full border-collapse">
               <thead>
                 <tr className="border-b border-border">
                   {["Campaign", "Sent", "Reply %", "Hot", "Meetings", ""].map((h) => (
@@ -383,6 +384,41 @@ export default async function DashboardPage({
                 })}
               </tbody>
             </table>
+
+            {/* Campaign health — mobile cards (below md) */}
+            <div className="md:hidden flex flex-col gap-2.5 p-3">
+              {campaignStats.slice(0, 6).map((c) => {
+                const rate = c.sent > 0 ? (c.replies / c.sent) * 100 : 0;
+                const isHealthy = rate > 10;
+                return (
+                  <Link
+                    key={c.id}
+                    href={`/campaigns/${c.id}`}
+                    className="bg-[oklch(0.12_0_0)] border border-border rounded-lg p-3 flex flex-col gap-2.5 hover:border-border-strong transition-colors duration-150"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="w-[5px] h-[5px] rounded-full shrink-0"
+                        style={{ background: c.status === "active" ? "var(--success)" : "var(--fg-5)" }}
+                      />
+                      <span className="font-mono text-[13px] text-fg-1 truncate flex-1">{c.name}</span>
+                      <Icon name="chevron" size={12} className="text-fg-5 shrink-0" />
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      <MobileStat label="Sent" value={String(c.sent)} />
+                      <MobileStat
+                        label="Reply"
+                        value={`${rate.toFixed(0)}%`}
+                        color={isHealthy ? "var(--success)" : undefined}
+                      />
+                      <MobileStat label="Hot" value={c.hot > 0 ? String(c.hot) : "—"} color={c.hot > 0 ? "var(--hot)" : undefined} />
+                      <MobileStat label="Mtgs" value={c.meetings > 0 ? String(c.meetings) : "—"} color={c.meetings > 0 ? "var(--info)" : undefined} />
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+            </>
           )}
         </Card>
 
@@ -465,15 +501,15 @@ function NeedsAttention({ items }: { items: AttentionItem[] }) {
 
       {/* Tiles grid */}
       <div
-        className="grid"
-        style={{ gridTemplateColumns: `repeat(${items.length}, 1fr)` }}
+        className="grid grid-cols-1 sm:[grid-template-columns:var(--attention-cols)]"
+        style={{ ["--attention-cols" as string]: `repeat(${items.length}, 1fr)` }}
       >
         {items.map((item, i) => {
           const cfg = ATTENTION_CFG[item.kind];
           return (
             <div
               key={item.kind}
-              className="flex flex-col gap-2.5 p-5"
+              className="flex flex-col gap-2.5 p-5 border-b border-border-soft last:border-b-0 sm:border-b-0"
               style={{
                 borderRight: i < items.length - 1 ? "1px solid var(--border-soft)" : "none",
               }}
@@ -620,4 +656,15 @@ function relativeTime(date: Date): string {
   if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
   return `${d}d ago`;
+}
+
+function MobileStat({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-fg-5">{label}</span>
+      <span className="font-mono text-[14px] tabular-nums" style={{ color: color ?? "var(--fg-2)" }}>
+        {value}
+      </span>
+    </div>
+  );
 }

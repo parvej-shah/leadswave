@@ -138,7 +138,7 @@ function RunningIndicator() {
 function StepIndicator({ phase }: { phase: Phase }) {
   const activeIdx = phase === "details" ? 0 : phase === "cities" ? 1 : 2;
   return (
-    <div className="flex items-center gap-0 mb-4">
+    <div className="flex items-center gap-0 mb-4 overflow-x-auto">
       {STEPS.map((step, i) => {
         const done = i < activeIdx || phase === "done";
         const active = i === activeIdx && phase !== "running" && phase !== "done";
@@ -501,7 +501,7 @@ export function NewCampaignWizard() {
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Business Type"
               placeholder='e.g. "dentists"'
@@ -521,7 +521,7 @@ export function NewCampaignWizard() {
               <p className="font-mono text-[11px] text-fg-5 m-0 uppercase tracking-wider">Offer Templates (optional)</p>
               <p className="font-mono text-[10px] text-fg-5 m-0">AI will draft based on your campaign details</p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="flex flex-col gap-1">
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-[10px] uppercase tracking-wider text-fg-4">Website-proposal offer</span>

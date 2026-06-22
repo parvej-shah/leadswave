@@ -180,9 +180,9 @@ export default function LeadDetailPage() {
   const alreadySent = ["contacted", "replied", "converted", "meeting_booked", "unsubscribed", "bounced"].includes(lead.state);
 
   return (
-    <div className="max-w-220 mx-auto px-4 py-4 flex flex-col gap-4">
+    <div className="max-w-220 mx-auto w-full py-4 flex flex-col gap-4">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-1.5 font-mono text-[11px] text-fg-4">
+      <div className="flex items-center gap-1.5 font-mono text-[11px] text-fg-4 flex-wrap min-w-0">
         <Link href="/campaigns" className="hover:text-fg-2 transition-colors duration-150">
           Campaigns
         </Link>
@@ -197,9 +197,9 @@ export default function LeadDetailPage() {
         <span className="text-fg-2">{lead.companyName}</span>
       </div>
 
-      <div className="grid grid-cols-[1fr_280px] gap-4 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
         {/* Left: thread + compose */}
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 order-2 lg:order-1">
           {/* Lead name + meta */}
           <div className="bg-surface border border-border rounded-xl p-4 flex flex-col gap-2">
             <div className="flex items-start justify-between gap-3">
@@ -431,7 +431,7 @@ export default function LeadDetailPage() {
         </div>
 
         {/* Right: lead info sidebar */}
-        <div className="flex flex-col gap-3 sticky top-4">
+        <div className="flex flex-col gap-3 order-1 lg:order-2 lg:sticky lg:top-4">
           <div className="bg-surface border border-border rounded-xl p-4 flex flex-col gap-3">
             <p className="font-mono text-[10px] uppercase tracking-wider text-fg-5 m-0">Details</p>
 

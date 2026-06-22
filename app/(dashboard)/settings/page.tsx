@@ -291,7 +291,7 @@ export default function SettingsPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-0.5 border-b border-border -mb-px">
+      <div className="flex gap-0.5 border-b border-border -mb-px overflow-x-auto flex-nowrap">
         {TABS.map((t) => {
           const isActive = tab === t.key;
           return (
@@ -300,7 +300,7 @@ export default function SettingsPage() {
               type="button"
               onClick={() => setTab(t.key)}
               className={[
-                "px-3.5 py-2.5 bg-transparent border-0 cursor-pointer font-mono text-[12px] -mb-px transition-colors duration-150",
+                "px-3.5 py-2.5 bg-transparent border-0 cursor-pointer font-mono text-[12px] -mb-px whitespace-nowrap transition-colors duration-150",
                 isActive
                   ? "text-amber border-b-2 border-amber"
                   : "text-fg-3 border-b-2 border-transparent hover:text-fg-2",
@@ -325,7 +325,7 @@ export default function SettingsPage() {
                 onChange={(e) => set("offerText", e.target.value)}
                 hint="The AI personalizes this per lead — keep it concise and outcome-focused."
               />
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
                   label="From name"
                   placeholder="Alex Kim"
@@ -443,7 +443,7 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>Sending Limits</CardHeader>
             <CardBody className="flex flex-col gap-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
                   label="Daily send limit"
                   type="number"
@@ -473,7 +473,7 @@ export default function SettingsPage() {
                   hint="Max emails per campaign per day (max 500)"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
                   label="Throttle (seconds between sends)"
                   type="number"

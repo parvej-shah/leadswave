@@ -8,6 +8,10 @@ import {
   Badge,
   Button,
   CategoryBadge,
+  DataCard,
+  DataCardActions,
+  DataCardMeta,
+  DataCardTitle,
   FilterChip,
   Icon,
   Input,
@@ -246,7 +250,7 @@ export default function CampaignDetailPage() {
         >
           ← Campaigns
         </Link>
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2.5 mb-1">
               <h1 className="ds-h1 m-0">{campaign.name}</h1>
@@ -266,7 +270,7 @@ export default function CampaignDetailPage() {
               )}
             </p>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center flex-wrap gap-2 lg:shrink-0">
             <button
               type="button"
               onClick={handleToggleAutoSend}
@@ -373,26 +377,102 @@ export default function CampaignDetailPage() {
           </p>
         </div>
       ) : (
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
-          {/* Table header */}
-          <div
-            className="grid border-b border-border bg-[oklch(0.13_0_0)]"
-            style={{ gridTemplateColumns: gridCols }}
-          >
-            <SortHeader label="Company" sortKey="company" sort={sort} onClick={toggleSort} />
-            <SortHeader label="Contact" />
-            <SortHeader label="State" sortKey="state" sort={sort} onClick={toggleSort} />
-            <SortHeader label="Msgs" sortKey="msgs" sort={sort} onClick={toggleSort} alignRight />
-            <SortHeader label="Last touched" sortKey="lastTouched" sort={sort} onClick={toggleSort} />
-            <SortHeader label="" />
+        <>
+          {/* Table — desktop / tablet (md+) */}
+          <div className="hidden md:block bg-surface border border-border rounded-xl overflow-hidden">
+            {/* Table header */}
+            <div
+              className="grid border-b border-border bg-[oklch(0.13_0_0)]"
+              style={{ gridTemplateColumns: gridCols }}
+            >
+              <SortHeader label="Company" sortKey="company" sort={sort} onClick={toggleSort} />
+              <SortHeader label="Contact" />
+              <SortHeader label="State" sortKey="state" sort={sort} onClick={toggleSort} />
+              <SortHeader label="Msgs" sortKey="msgs" sort={sort} onClick={toggleSort} alignRight />
+              <SortHeader label="Last touched" sortKey="lastTouched" sort={sort} onClick={toggleSort} />
+              <SortHeader label="" />
+            </div>
+
+            {filtered.map((lead, idx) => (
+              <LeadRow key={lead.id} lead={lead} idx={idx} gridCols={gridCols} campaignId={id} />
+            ))}
           </div>
 
-          {filtered.map((lead, idx) => (
-            <LeadRow key={lead.id} lead={lead} idx={idx} gridCols={gridCols} campaignId={id} />
-          ))}
-        </div>
+          {/* Cards — mobile (below md) */}
+          <div className="md:hidden flex flex-col gap-2.5">
+            {filtered.map((lead) => (
+              <LeadCard key={lead.id} lead={lead} campaignId={id} />
+            ))}
+          </div>
+        </>
       )}
     </div>
+  );
+}
+
+// Mobile card variant of LeadRow.
+function LeadCard({ lead, campaignId }: { lead: Lead; campaignId: string }) {
+  const msgs = lead._count.messages;
+  const contact =
+    lead.email ||
+    lead.phone ||
+    (lead.hasContactForm && lead.website ? "contact form" : null) ||
+    (lead.facebookUrl ? "facebook" : null) ||
+    (lead.website ? truncateUrl(lead.website) : null);
+
+  return (
+    <DataCard>
+      <DataCardTitle trailing={<StateBadge state={lead.state} />}>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Avatar name={lead.companyName} size={26} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Link
+                href={`/campaigns/${campaignId}/leads/${lead.id}`}
+                className="font-sans text-[14px] text-fg-1 hover:text-amber font-medium tracking-[-0.01em] truncate transition-colors duration-150"
+              >
+                {lead.companyName}
+              </Link>
+              <CategoryBadge category={lead.category} size="sm" />
+            </div>
+            {contact && (
+              <p className="font-mono text-[11px] text-fg-4 m-0 mt-0.5 truncate">{contact}</p>
+            )}
+          </div>
+        </div>
+      </DataCardTitle>
+
+      <DataCardMeta>
+        <span style={{ color: msgs > 0 ? "var(--amber)" : undefined }}>{msgs} msgs</span>
+        <span className="text-fg-5">·</span>
+        <span>{relativeTime(lead.lastTouchedAt)}</span>
+        {lead.website && (
+          <>
+            <span className="text-fg-5">·</span>
+            <a
+              href={lead.website}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-info hover:text-fg-1 truncate"
+            >
+              {truncateUrl(lead.website)}
+            </a>
+          </>
+        )}
+      </DataCardMeta>
+
+      <DataCardActions>
+        {!lead.email && lead.phone && (
+          <WhatsAppButton leadId={lead.id} phone={lead.phone} companyName={lead.companyName} />
+        )}
+        <span className="flex-1" />
+        <Link href={`/campaigns/${campaignId}/leads/${lead.id}`}>
+          <Button size="sm" variant="ghost">
+            View →
+          </Button>
+        </Link>
+      </DataCardActions>
+    </DataCard>
   );
 }
 

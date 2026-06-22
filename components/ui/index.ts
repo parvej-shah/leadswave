@@ -13,3 +13,4 @@ export { Kbd } from "./kbd";
 export { FilterChip } from "./filter-chip";
 export { Segmented, type SegmentedOption } from "./segmented";
 export { Avatar } from "./avatar";
+export { DataCard, DataCardTitle, DataCardMeta, DataCardActions } from "./data-card";

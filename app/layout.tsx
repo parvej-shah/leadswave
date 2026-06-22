@@ -1,6 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { DM_Mono, Inter } from "next/font/google";
 import "./globals.css";
+import { ServiceWorkerRegister } from "./service-worker-register";
+import { InstallPrompt } from "./install-prompt";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -16,13 +18,26 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LeadsWave",
-  description: "Outbound on autopilot.",
-  icons: {
-    icon: [{ url: "/favicon.ico", sizes: "any" }],
-    apple: [{ url: "/apple-icon.png", sizes: "1254x1254" }],
-    shortcut: ["/favicon.ico"],
+  applicationName: "LeadsWave",
+  title: {
+    default: "LeadsWave",
+    template: "%s · LeadsWave",
   },
+  description: "Outbound on autopilot.",
+  appleWebApp: {
+    capable: true,
+    title: "LeadsWave",
+    statusBarStyle: "black-translucent",
+  },
+  formatDetection: { telephone: false },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0a0a0a",
+  colorScheme: "dark",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -35,7 +50,11 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${dmMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <ServiceWorkerRegister />
+        <InstallPrompt />
+      </body>
     </html>
   );
 }

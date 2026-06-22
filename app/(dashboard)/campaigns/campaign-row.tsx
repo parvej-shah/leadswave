@@ -44,9 +44,9 @@ const variant = (statusVariant as Record<string, "success" | "neutral">)[c.statu
   const dotColor = (statusDot as Record<string, string>)[c.status] ?? "var(--fg-5)";
 
   return (
-    <div className="bg-surface border border-border hover:border-border-strong rounded-xl px-4.5 py-3.5 flex items-center gap-5 transition-colors duration-150 min-w-0 group">
+    <div className="bg-surface border border-border hover:border-border-strong rounded-xl px-4 lg:px-4.5 py-3.5 flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-5 transition-colors duration-150 min-w-0 group">
       {/* Status + name + sub */}
-      <div className="min-w-0 flex items-center gap-3 flex-[1.6] basis-0">
+      <div className="min-w-0 flex items-center gap-3 lg:flex-[1.6] lg:basis-0">
         <span
           className={cn(
             "w-1.5 h-1.5 rounded-full shrink-0",
@@ -73,7 +73,7 @@ const variant = (statusVariant as Record<string, "success" | "neutral">)[c.statu
       </div>
 
       {/* Compact metrics */}
-      <div className="flex items-center gap-4 shrink-0">
+      <div className="flex items-center flex-wrap gap-4 shrink-0">
         <CompactMetric label="LEADS" value={c.leads}>
           <Sparkline data={spark} color="var(--amber)" height={18} width={48} showDot={false} />
         </CompactMetric>
@@ -115,7 +115,7 @@ const variant = (statusVariant as Record<string, "success" | "neutral">)[c.statu
       </div>
 
       {/* Actions */}
-      <div className="flex gap-1.5 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity duration-150">
+      <div className="flex flex-wrap gap-1.5 shrink-0 lg:ml-auto opacity-100 lg:opacity-70 lg:group-hover:opacity-100 transition-opacity duration-150">
         <Link href={`/campaigns/${c.id}/scout`}>
           <Button size="sm" variant="secondary" iconStart="refresh">
             Re-scout
