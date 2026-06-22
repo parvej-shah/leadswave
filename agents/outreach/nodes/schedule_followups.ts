@@ -1,8 +1,8 @@
 import { db } from "@/lib/db";
 import { OutreachState } from "../graph";
 
-const FOLLOWUP_DELAYS_DAYS = [3, 7, 12] as const;
-const FOLLOWUP_TYPES = ["followup_2", "followup_3", "followup_4"] as const;
+const FOLLOWUP_DELAYS_DAYS = [3] as const;
+const FOLLOWUP_TYPES = ["followup_2"] as const;
 
 export async function scheduleFollowupsNode(state: OutreachState): Promise<Partial<OutreachState>> {
   const now = new Date();
