@@ -7,9 +7,14 @@ const EVENT_TO_STATUS: Record<string, string> = {
   "email.delivered": "delivered",
   "email.delivery_delayed": "sent",
   "email.opened": "opened",
+  "email.clicked": "opened",
   "email.bounced": "bounced",
   "email.complained": "complained",
+  "email.failed": "bounced",
+  "email.suppressed": "bounced",
 };
+
+const TERMINAL_STATUSES = new Set(["bounced", "complained"]);
 
 const STATUS_PRIORITY: Record<string, number> = {
   sent: 0,
@@ -47,7 +52,7 @@ export async function POST(req: NextRequest) {
   const currentPriority = STATUS_PRIORITY[message.deliveryStatus ?? "sent"] ?? 0;
   const newPriority = STATUS_PRIORITY[newStatus] ?? 0;
 
-  if (newPriority <= currentPriority && newStatus !== "bounced" && newStatus !== "complained") {
+  if (newPriority <= currentPriority && !TERMINAL_STATUSES.has(newStatus)) {
     return NextResponse.json({ ok: true, skipped: true, reason: "status not advanced" });
   }
 
@@ -56,7 +61,7 @@ export async function POST(req: NextRequest) {
     data: { deliveryStatus: newStatus },
   });
 
-  if (newStatus === "bounced" || newStatus === "complained") {
+  if (TERMINAL_STATUSES.has(newStatus)) {
     const lead = await db.lead.findUnique({
       where: { id: message.leadId },
       select: { email: true, id: true, companyName: true, state: true },
