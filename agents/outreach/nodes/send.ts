@@ -38,6 +38,8 @@ export async function sendNode(state: OutreachState): Promise<Partial<OutreachSt
       direction: "outbound",
       subject: state.emailDraft.subject,
       body: sentText,
+      resendId: data?.id ?? null,
+      deliveryStatus: "sent",
     },
   });
 

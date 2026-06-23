@@ -23,6 +23,7 @@ type Message = {
   subject: string | null;
   body: string;
   bodyHtml?: string | null;
+  deliveryStatus?: string | null;
   sentAt: string;
 };
 
@@ -528,8 +529,27 @@ function MessageBubble({ message }: { message: Message }) {
           html={message.bodyHtml || message.body.replace(/\n/g, "<br>")}
           className="font-mono text-[11.5px] text-fg-2 leading-relaxed"
         />
+        {isOutbound && message.deliveryStatus && (
+          <DeliveryStatusBadge status={message.deliveryStatus} />
+        )}
       </div>
     </div>
+  );
+}
+
+function DeliveryStatusBadge({ status }: { status: string }) {
+  const config: Record<string, { label: string; color: string; icon: string }> = {
+    sent: { label: "Sent", color: "text-fg-4", icon: "✓" },
+    delivered: { label: "Delivered", color: "text-success", icon: "✓✓" },
+    opened: { label: "Opened", color: "text-info", icon: "👁" },
+    bounced: { label: "Bounced", color: "text-hot", icon: "✕" },
+    complained: { label: "Spam", color: "text-hot", icon: "⚠" },
+  };
+  const c = config[status] ?? { label: status, color: "text-fg-5", icon: "?" };
+  return (
+    <span className={`font-mono text-[9px] ${c.color} flex items-center gap-0.5 self-end`} title={`Email ${c.label.toLowerCase()}`}>
+      {c.icon} {c.label}
+    </span>
   );
 }
 

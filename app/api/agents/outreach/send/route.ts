@@ -72,11 +72,11 @@ export async function POST(req: NextRequest) {
       signatureText: settings.signatureText,
     });
 
-    const { error } = await resend.emails.send({ from, to: lead.email, subject, html: email.html, text: email.text });
+    const { data: sendData, error } = await resend.emails.send({ from, to: lead.email, subject, html: email.html, text: email.text });
     if (error) throw new Error(`Resend error: ${error.message ?? JSON.stringify(error)}`);
 
     await db.message.create({
-      data: { leadId, direction: "outbound", subject, body: email.bodyText, bodyHtml: email.bodyHtml },
+      data: { leadId, direction: "outbound", subject, body: email.bodyText, bodyHtml: email.bodyHtml, resendId: sendData?.id ?? null, deliveryStatus: "sent" },
     });
 
     await db.lead.update({

@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
     });
 
     try {
-      const { error } = await resend.emails.send({
+      const { data: sendData, error } = await resend.emails.send({
         from,
         to: lead.email,
         subject,
@@ -185,7 +185,7 @@ export async function POST(req: NextRequest) {
 
       await Promise.all([
         db.message.create({
-          data: { leadId: lead.id, direction: "outbound", subject, body: outbound.bodyText, bodyHtml: outbound.bodyHtml },
+          data: { leadId: lead.id, direction: "outbound", subject, body: outbound.bodyText, bodyHtml: outbound.bodyHtml, resendId: sendData?.id ?? null, deliveryStatus: "sent" },
         }),
         db.lead.update({
           where: { id: lead.id },

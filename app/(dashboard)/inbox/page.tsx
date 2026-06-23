@@ -22,6 +22,7 @@ type Message = {
   subject: string | null;
   body: string | null;
   bodyHtml?: string | null;
+  deliveryStatus?: string | null;
   sentAt: string;
 };
 
@@ -539,7 +540,26 @@ function ThreadMessage({ msg }: { msg: Message }) {
         }}
       >
         <RichTextViewer html={msg.bodyHtml || msg.body?.replace(/\n/g, "<br>")} />
+        {!inbound && msg.deliveryStatus && (
+          <DeliveryTag status={msg.deliveryStatus} />
+        )}
       </div>
     </div>
+  );
+}
+
+function DeliveryTag({ status }: { status: string }) {
+  const cfg: Record<string, { label: string; color: string; icon: string }> = {
+    sent: { label: "Sent", color: "text-fg-4", icon: "✓" },
+    delivered: { label: "Delivered", color: "text-success", icon: "✓✓" },
+    opened: { label: "Opened", color: "text-info", icon: "👁" },
+    bounced: { label: "Bounced", color: "text-hot", icon: "✕" },
+    complained: { label: "Spam", color: "text-hot", icon: "⚠" },
+  };
+  const c = cfg[status] ?? { label: status, color: "text-fg-5", icon: "?" };
+  return (
+    <span className={`font-mono text-[9px] ${c.color} flex items-center gap-0.5 mt-1.5`} title={`Email ${c.label.toLowerCase()}`}>
+      {c.icon} {c.label}
+    </span>
   );
 }

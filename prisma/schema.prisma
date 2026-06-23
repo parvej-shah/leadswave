@@ -59,14 +59,16 @@ model Lead {
 }
 
 model Message {
-  id        String   @id @default(cuid())
-  leadId    String
-  direction String   // outbound | inbound | system
-  subject   String?
-  body      String   // canonical plain text: thread previews, AI follow-up context, search
-  bodyHtml  String?  // rich-text rendering (replies/follow-ups); null for plain/AI-generated
-  sentAt    DateTime @default(now())
-  lead      Lead     @relation(fields: [leadId], references: [id])
+  id             String   @id @default(cuid())
+  leadId         String
+  direction      String   // outbound | inbound | system
+  subject        String?
+  body           String   // canonical plain text: thread previews, AI follow-up context, search
+  bodyHtml       String?  // rich-text rendering (replies/follow-ups); null for plain/AI-generated
+  resendId       String?  // Resend email ID for webhook correlation
+  deliveryStatus String?  // sent | delivered | opened | bounced | complained
+  sentAt         DateTime @default(now())
+  lead           Lead     @relation(fields: [leadId], references: [id])
 }
 
 model Job {

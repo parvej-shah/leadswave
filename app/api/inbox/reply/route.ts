@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     signatureText: settings.signatureText,
   });
 
-  const { error } = await resend.emails.send({
+  const { data: sendData, error } = await resend.emails.send({
     from,
     to: lead.email,
     subject,
@@ -63,6 +63,8 @@ export async function POST(req: NextRequest) {
       subject,
       body: outbound.bodyText,
       bodyHtml: outbound.bodyHtml,
+      resendId: sendData?.id ?? null,
+      deliveryStatus: "sent",
     },
   });
 
