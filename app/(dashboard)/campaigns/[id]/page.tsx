@@ -48,6 +48,20 @@ type Campaign = {
   createdAt: string;
 };
 
+type CampaignStats = {
+  totalLeads: number;
+  withEmail: number;
+  contactedLeads: number;
+  totalSent: number;
+  delivered: number;
+  opened: number;
+  bounced: number;
+  complained: number;
+  totalReplies: number;
+  repliedLeads: number;
+  convertedLeads: number;
+};
+
 const STATE_KEYS: LeadState[] = [
   "discovered",
   "contacted",
@@ -98,6 +112,7 @@ export default function CampaignDetailPage() {
     total: number;
   } | null>(null);
   const [togglingAutoSend, setTogglingAutoSend] = useState(false);
+  const [stats, setStats] = useState<CampaignStats | null>(null);
 
   const refreshLeads = useCallback(() => {
     return fetch(`/api/campaigns/${id}/leads`)
@@ -109,22 +124,30 @@ export default function CampaignDetailPage() {
     Promise.all([
       fetch(`/api/campaigns/${id}`).then((r) => r.json()),
       fetch(`/api/campaigns/${id}/leads`).then((r) => r.json()),
+      fetch(`/api/campaigns/${id}/stats`).then((r) => r.json()),
     ])
-      .then(([campaignData, leadsData]) => {
+      .then(([campaignData, leadsData, statsData]) => {
         if (campaignData.error) throw new Error(campaignData.error);
         setCampaign(campaignData);
         setLeads(Array.isArray(leadsData) ? leadsData : []);
+        if (!statsData.error) setStats(statsData);
       })
       .catch((e: Error) => setLoadError(e.message))
       .finally(() => setLoading(false));
   }, [id]);
 
+  const refreshStats = useCallback(() => {
+    return fetch(`/api/campaigns/${id}/stats`)
+      .then((r) => r.json())
+      .then((data) => { if (!data.error) setStats(data); });
+  }, [id]);
+
   // Poll for lead updates while auto-send is active
   useEffect(() => {
     if (!campaign?.autoSend) return;
-    const interval = setInterval(refreshLeads, 15_000);
+    const interval = setInterval(() => { refreshLeads(); refreshStats(); }, 15_000);
     return () => clearInterval(interval);
-  }, [campaign?.autoSend, refreshLeads]);
+  }, [campaign?.autoSend, refreshLeads, refreshStats]);
 
   const filtered = useMemo(() => {
     const list = leads.filter((l) => {
@@ -323,6 +346,46 @@ export default function CampaignDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Campaign stats */}
+      {stats && stats.totalLeads > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+          <StatTile label="Leads" value={stats.totalLeads} sub={`${stats.withEmail} with email`} />
+          <StatTile
+            label="Contacted"
+            value={stats.contactedLeads}
+            sub={stats.totalLeads > 0 ? `${pct(stats.contactedLeads, stats.withEmail || stats.totalLeads)}% of reachable` : undefined}
+          />
+          <StatTile
+            label="Delivered"
+            value={stats.delivered}
+            sub={stats.totalSent > 0 ? `${pct(stats.delivered, stats.totalSent)}% of sent` : undefined}
+            color="success"
+          />
+          <StatTile
+            label="Opened"
+            value={stats.opened}
+            sub={stats.delivered > 0 ? `${pct(stats.opened, stats.delivered)}% open rate` : undefined}
+            color="info"
+          />
+          <StatTile
+            label="Replied"
+            value={stats.repliedLeads}
+            sub={stats.contactedLeads > 0 ? `${pct(stats.repliedLeads, stats.contactedLeads)}% reply rate` : undefined}
+            color="amber"
+          />
+          <StatTile
+            label="Bounced"
+            value={stats.bounced + stats.complained}
+            sub={
+              stats.totalSent > 0
+                ? `${pct(stats.bounced + stats.complained, stats.totalSent)}% bounce rate`
+                : undefined
+            }
+            color={stats.bounced + stats.complained > 0 ? "hot" : undefined}
+          />
+        </div>
+      )}
 
       {/* Stat pills */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -594,6 +657,43 @@ function LeadRow({
           </Button>
         </Link>
       </div>
+    </div>
+  );
+}
+
+function pct(num: number, den: number): string {
+  if (den === 0) return "0";
+  return Math.round((num / den) * 100).toString();
+}
+
+function StatTile({
+  label,
+  value,
+  sub,
+  color,
+}: {
+  label: string;
+  value: number;
+  sub?: string;
+  color?: "success" | "info" | "amber" | "hot";
+}) {
+  const colorMap: Record<string, string> = {
+    success: "text-success",
+    info: "text-info",
+    amber: "text-amber",
+    hot: "text-hot",
+  };
+  const valueColor = color ? colorMap[color] : "text-fg-1";
+
+  return (
+    <div className="bg-surface border border-border rounded-xl px-4 py-3 flex flex-col gap-0.5">
+      <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">{label}</span>
+      <span className={`font-sans text-[22px] font-semibold tracking-tight leading-none ${valueColor}`}>
+        {value}
+      </span>
+      {sub && (
+        <span className="font-mono text-[10px] text-fg-5 mt-0.5">{sub}</span>
+      )}
     </div>
   );
 }
