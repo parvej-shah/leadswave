@@ -36,6 +36,7 @@ const MapsScoutAnnotation = Annotation.Root({
     default: () => ({}),
   }),
   campaignId: Annotation<string>(),
+  orgId: Annotation<string>(),
   googleMapsApiKey: Annotation<string>(),
   firecrawlApiKey: Annotation<string>(),
   // Quadrant-fallback budget for cities without selected areas

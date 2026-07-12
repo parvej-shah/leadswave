@@ -59,6 +59,8 @@ export default async function DashboardPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
+  const orgId = session.orgId;
+  if (!orgId) redirect("/login");
 
   const { period: rawPeriod } = await searchParams;
   const period: Period =
@@ -85,18 +87,18 @@ export default async function DashboardPage({
     todayMeetings,
     scoutsNeedingReview,
   ] = await Promise.all([
-    db.lead.count({ where: { deletedAt: null, createdAt: { gte: since } } }),
-    db.message.count({ where: { direction: "outbound", sentAt: { gte: since } } }),
-    db.lead.count({ where: { state: "meeting_booked", deletedAt: null, lastTouchedAt: { gte: since } } }),
-    db.message.count({ where: { direction: "inbound", sentAt: { gte: since } } }),
-    db.lead.count({ where: { state: "replied", deletedAt: null } }),
+    db.lead.count({ where: { orgId, deletedAt: null, createdAt: { gte: since } } }),
+    db.message.count({ where: { direction: "outbound", sentAt: { gte: since }, lead: { orgId } } }),
+    db.lead.count({ where: { orgId, state: "meeting_booked", deletedAt: null, lastTouchedAt: { gte: since } } }),
+    db.message.count({ where: { direction: "inbound", sentAt: { gte: since }, lead: { orgId } } }),
+    db.lead.count({ where: { orgId, state: "replied", deletedAt: null } }),
     db.campaign.findMany({
-      where: { deletedAt: null },
+      where: { orgId, deletedAt: null },
       include: { leads: { include: { messages: true } } },
       orderBy: { createdAt: "desc" },
     }),
-    sparkBuckets("message", 7, { direction: "outbound" }),
-    sparkBuckets("message", 7, { direction: "inbound" }),
+    sparkBuckets("message", 7, { direction: "outbound", lead: { orgId } }),
+    sparkBuckets("message", 7, { direction: "inbound", lead: { orgId } }),
     // hot replies: inbound messages from replied leads — approximate via lead.state
     (async () => {
       const buckets: number[] = [];
@@ -107,7 +109,7 @@ export default async function DashboardPage({
         dayStart.setUTCDate(dayStart.getUTCDate() - i);
         const dayEnd = new Date(dayStart);
         dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
-        const c = await db.lead.count({ where: { state: "replied", deletedAt: null, lastTouchedAt: { gte: dayStart, lt: dayEnd } } });
+        const c = await db.lead.count({ where: { orgId, state: "replied", deletedAt: null, lastTouchedAt: { gte: dayStart, lt: dayEnd } } });
         buckets.push(c);
       }
       return buckets;
@@ -121,15 +123,16 @@ export default async function DashboardPage({
         dayStart.setUTCDate(dayStart.getUTCDate() - i);
         const dayEnd = new Date(dayStart);
         dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
-        const c = await db.lead.count({ where: { state: "meeting_booked", deletedAt: null, lastTouchedAt: { gte: dayStart, lt: dayEnd } } });
+        const c = await db.lead.count({ where: { orgId, state: "meeting_booked", deletedAt: null, lastTouchedAt: { gte: dayStart, lt: dayEnd } } });
         buckets.push(c);
       }
       return buckets;
     })(),
-    sparkBuckets("lead", 7, { deletedAt: null }),
+    sparkBuckets("lead", 7, { orgId, deletedAt: null }),
     // Today's meetings (CalendarEvent starting today)
     db.calendarEvent.count({
       where: {
+        lead: { orgId },
         startTime: {
           gte: new Date(new Date().setUTCHours(0, 0, 0, 0)),
           lt: new Date(new Date().setUTCHours(23, 59, 59, 999)),
@@ -138,7 +141,7 @@ export default async function DashboardPage({
     }),
     // Scouts needing review: leads in "discovered" state not yet contacted
     db.lead.count({
-      where: { state: "discovered", deletedAt: null },
+      where: { orgId, state: "discovered", deletedAt: null },
     }),
   ]);
 

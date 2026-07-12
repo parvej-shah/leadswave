@@ -2,6 +2,7 @@ import { Resend } from "resend";
 import { db } from "@/lib/db";
 import { OutreachState } from "../graph";
 import { appendOpenerSignature } from "@/lib/email/signature";
+import { sendsDisabled, dryRunSend } from "@/lib/email/guard";
 
 export async function sendNode(state: OutreachState): Promise<Partial<OutreachState>> {
   if (!state.lead.email) throw new Error(`Lead ${state.leadId} has no email address`);
@@ -22,12 +23,14 @@ export async function sendNode(state: OutreachState): Promise<Partial<OutreachSt
     state.signatureHtml,
   );
 
-  const { data, error } = await resend.emails.send({
-    from: state.fromName ? `${state.fromName} <${state.fromEmail}>` : state.fromEmail,
-    to: state.lead.email,
-    subject: state.emailDraft.subject,
-    text: sentText,
-  });
+  const { data, error } = sendsDisabled()
+    ? dryRunSend(state.lead.email, state.emailDraft.subject)
+    : await resend.emails.send({
+        from: state.fromName ? `${state.fromName} <${state.fromEmail}>` : state.fromEmail,
+        to: state.lead.email,
+        subject: state.emailDraft.subject,
+        text: sentText,
+      });
 
   if (error) throw new Error(`Resend error: ${error.message ?? JSON.stringify(error)}`);
   console.log("[send] Resend accepted:", data?.id);

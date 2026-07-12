@@ -5,6 +5,9 @@ import { getAvailableSlots, createEvent, Slot } from "@/lib/calendar/client";
 import { BOOKING_EXAMPLES } from "@/lib/ai/training/inbox-examples";
 import { InboxState } from "../graph";
 import { Resend } from "resend";
+import { sendsDisabled, dryRunSend } from "@/lib/email/guard";
+import { getSystemSettings } from "@/lib/settings";
+import { getOrgOwnerGoogleToken } from "@/lib/tenant";
 
 const MEETING_KEYWORDS = /\b(yes|interested|let'?s (talk|chat|meet|connect)|call|meeting|schedule|when are you free|available|book|hop on|demo|sounds good|option\s*[123]|slot\s*[123]|that works|confirm)\b/i;
 
@@ -92,6 +95,10 @@ async function sendEmail(
   subject: string,
   body: string,
 ) {
+  if (sendsDisabled()) {
+    dryRunSend(to, subject);
+    return;
+  }
   const resend = new Resend(settings.resendApiKey);
   const from = settings.fromName ? `${settings.fromName} <${settings.fromEmail}>` : settings.fromEmail;
   await resend.emails.send({ from, to, subject, text: body }).catch(() => null);
@@ -268,14 +275,23 @@ export async function hotNode(state: InboxState): Promise<Partial<InboxState>> {
     return {};
   }
 
-  // Load Google Calendar settings
-  const settings = await db.settings.findFirst({
-    where: { googleClientId: { not: null }, googleClientSecret: { not: null }, googleRefreshToken: { not: null } },
-    select: {
-      googleClientId: true, googleClientSecret: true, googleRefreshToken: true,
-      calendarId: true, resendApiKey: true, fromEmail: true, fromName: true,
-    },
-  });
+  // Load Google Calendar settings for the lead's own org: client id/secret from
+  // org Settings, refresh token preferring the org owner's User row (where auth
+  // now stores it) with the legacy Settings column as fallback.
+  const orgId = state.lead.orgId;
+  const orgSettings = orgId ? await getSystemSettings(orgId) : null;
+  const ownerToken = orgId ? await getOrgOwnerGoogleToken(orgId) : null;
+  const settings = orgSettings
+    ? {
+        googleClientId: orgSettings.googleClientId || null,
+        googleClientSecret: orgSettings.googleClientSecret || null,
+        googleRefreshToken: ownerToken?.refreshToken ?? orgSettings.googleRefreshToken,
+        calendarId: orgSettings.calendarId || null,
+        resendApiKey: orgSettings.resendApiKey || null,
+        fromEmail: orgSettings.fromEmail || null,
+        fromName: orgSettings.fromName || null,
+      }
+    : null;
 
   if (!settings?.googleClientId || !settings.googleClientSecret || !settings.googleRefreshToken) {
     // No calendar — just notify

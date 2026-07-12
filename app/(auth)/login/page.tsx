@@ -1,7 +1,22 @@
 "use client";
 
+import { Suspense } from "react";
 import { signIn } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import { Button, GoogleIcon } from "@/components/ui";
+
+function SignInButton() {
+  const searchParams = useSearchParams();
+  const raw = searchParams.get("callbackUrl") ?? "/";
+  // Only same-origin relative paths — never an absolute URL from the query string.
+  const callbackUrl = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
+  return (
+    <Button fullWidth size="lg" onClick={() => signIn("google", { callbackUrl })}>
+      <GoogleIcon size={16} />
+      <span>Continue with Google →</span>
+    </Button>
+  );
+}
 
 export default function LoginPage() {
   return (
@@ -36,10 +51,9 @@ export default function LoginPage() {
             Sign in with your Google account to access your calendar and outreach tools.
           </p>
 
-          <Button fullWidth size="lg" onClick={() => signIn("google", { callbackUrl: "/" })}>
-            <GoogleIcon size={16} />
-            <span>Continue with Google →</span>
-          </Button>
+          <Suspense fallback={null}>
+            <SignInButton />
+          </Suspense>
         </div>
 
         <div className="mt-6 flex justify-center">

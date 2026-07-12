@@ -23,6 +23,7 @@ const ScoutAnnotation = Annotation.Root({
   query: Annotation<string>(),
   location: Annotation<string>(),
   campaignId: Annotation<string>(),
+  orgId: Annotation<string>(),
   firecrawlApiKey: Annotation<string>(),
   anthropicApiKey: Annotation<string>(),
   rawResults: Annotation<RawResult[], RawResult[]>({

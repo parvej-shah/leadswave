@@ -18,6 +18,7 @@ export type InboundEmail = {
 
 type Lead = {
   id: string;
+  orgId: string;
   companyName: string;
   email: string | null;
   state: string;

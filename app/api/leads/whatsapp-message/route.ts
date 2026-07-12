@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { db } from "@/lib/db";
 import { generateText } from "@/lib/gemini";
 import { getSystemSettings } from "@/lib/settings";
@@ -7,11 +7,6 @@ import { resolveOffer } from "@/agents/outreach/lib/offer";
 import { resolveLanguage, type OutreachLanguage } from "@/agents/outreach/lib/locale";
 import { loadWebsiteSummary } from "@/agents/outreach/lib/context";
 import { buildWhatsAppOpenerPrompt } from "@/agents/outreach/lib/opener";
-
-async function getUserId() {
-  const session = await auth();
-  return session?.user?.id ?? null;
-}
 
 // AI-unavailable fallback. Still an OPENER, not a pitch: a soft observation +
 // a low-pressure question, never an offer or a "let's chat" CTA. See
@@ -41,15 +36,19 @@ function fallbackMessage(
 }
 
 export async function POST(req: NextRequest) {
-  const userId = await getUserId();
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireOrg();
+  } catch (e) {
+    return tenantErrorResponse(e);
+  }
 
   const { leadId } = await req.json();
   if (!leadId) return NextResponse.json({ error: "leadId required" }, { status: 400 });
 
   const [lead, settings] = await Promise.all([
-    db.lead.findUnique({ where: { id: leadId }, include: { campaign: true } }),
-    getSystemSettings(),
+    db.lead.findFirst({ where: { id: leadId, orgId: ctx.orgId }, include: { campaign: true } }),
+    getSystemSettings(ctx.orgId),
   ]);
   if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
   if (!lead.phone) return NextResponse.json({ error: "Lead has no phone number" }, { status: 400 });

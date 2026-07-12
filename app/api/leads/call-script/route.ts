@@ -1,23 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { db } from "@/lib/db";
 import { generateText } from "@/lib/gemini";
 import { resolveOffer } from "@/agents/outreach/lib/offer";
 
-async function getUserId() {
-  const session = await auth();
-  return session?.user?.id ?? null;
-}
-
 export async function POST(req: NextRequest) {
-  const userId = await getUserId();
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireOrg();
+  } catch (e) {
+    return tenantErrorResponse(e);
+  }
 
   const { leadId } = await req.json();
   if (!leadId) return NextResponse.json({ error: "leadId required" }, { status: 400 });
 
-  const lead = await db.lead.findUnique({
-    where: { id: leadId },
+  const lead = await db.lead.findFirst({
+    where: { id: leadId, orgId: ctx.orgId },
     include: { campaign: true },
   });
   if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });

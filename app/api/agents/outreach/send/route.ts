@@ -1,15 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getSystemSettings } from "@/lib/settings";
+import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { Resend } from "resend";
 import { scheduleFollowupsNode } from "@/agents/outreach/nodes/schedule_followups";
 import { verifyEmailAddress } from "@/lib/email/verify";
 import { buildOutboundEmail } from "@/lib/email/signature";
+import { sendsDisabled, dryRunSend } from "@/lib/email/guard";
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireOrg();
+  } catch (e) {
+    return tenantErrorResponse(e);
+  }
 
   const { leadId, subject, body } = (await req.json()) as {
     leadId?: string;
@@ -22,8 +27,8 @@ export async function POST(req: NextRequest) {
   if (!body?.trim()) return NextResponse.json({ error: "body required" }, { status: 400 });
 
   const [lead, settings] = await Promise.all([
-    db.lead.findUnique({ where: { id: leadId }, include: { campaign: true } }),
-    getSystemSettings(),
+    db.lead.findFirst({ where: { id: leadId, orgId: ctx.orgId }, include: { campaign: true } }),
+    getSystemSettings(ctx.orgId),
   ]);
 
   if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
@@ -72,7 +77,9 @@ export async function POST(req: NextRequest) {
       signatureText: settings.signatureText,
     });
 
-    const { data: sendData, error } = await resend.emails.send({ from, to: lead.email, subject, html: email.html, text: email.text });
+    const { data: sendData, error } = sendsDisabled()
+      ? dryRunSend(lead.email, subject)
+      : await resend.emails.send({ from, to: lead.email, subject, html: email.html, text: email.text });
     if (error) throw new Error(`Resend error: ${error.message ?? JSON.stringify(error)}`);
 
     await db.message.create({

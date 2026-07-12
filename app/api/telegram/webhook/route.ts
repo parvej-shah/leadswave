@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { createEvent } from "@/lib/calendar/client";
-import { sendTelegramMessage } from "@/lib/telegram";
+import { getSystemSettings } from "@/lib/settings";
+import { getOrgOwnerGoogleToken } from "@/lib/tenant";
+import { sendsDisabled, dryRunSend } from "@/lib/email/guard";
 
 type TelegramUpdate = {
   message?: {
@@ -9,6 +11,17 @@ type TelegramUpdate = {
     text?: string;
   };
 };
+
+/**
+ * Telegram calls this endpoint; authenticate it with the secret_token set via
+ * setWebhook (arrives as X-Telegram-Bot-Api-Secret-Token). Without the env the
+ * gate is open — same dev convention as CRON_SECRET.
+ */
+function isAuthorized(req: NextRequest): boolean {
+  const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  if (!secret) return true;
+  return req.headers.get("x-telegram-bot-api-secret-token") === secret;
+}
 
 async function replyToChat(chatId: number, text: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -18,6 +31,15 @@ async function replyToChat(chatId: number, text: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
   });
+}
+
+/** The org this chat is bound to (via /start <connect-code>), or null. */
+async function orgForChat(chatId: number): Promise<string | null> {
+  const settings = await db.settings.findFirst({
+    where: { telegramChatId: String(chatId) },
+    select: { orgId: true },
+  });
+  return settings?.orgId ?? null;
 }
 
 async function processFollowupJobs(): Promise<{ processed: number; failed: number; total: number }> {
@@ -30,13 +52,13 @@ async function processFollowupJobs(): Promise<{ processed: number; failed: numbe
   return res.json() as Promise<{ processed: number; failed: number; total: number }>;
 }
 
-async function getStatus(): Promise<string> {
+async function getStatus(orgId: string): Promise<string> {
   const [totalLeads, emailsSent, hotLeads, meetings, pendingJobs, pendingConfirms] = await Promise.all([
-    db.lead.count({ where: { deletedAt: null } }),
-    db.message.count({ where: { direction: "outbound" } }),
-    db.lead.count({ where: { state: "replied" } }),
-    db.lead.count({ where: { state: "meeting_booked" } }),
-    db.job.count({ where: { status: "pending", scheduledAt: { lte: new Date() } } }),
+    db.lead.count({ where: { orgId, deletedAt: null } }),
+    db.message.count({ where: { direction: "outbound", lead: { orgId } } }),
+    db.lead.count({ where: { orgId, state: "replied" } }),
+    db.lead.count({ where: { orgId, state: "meeting_booked" } }),
+    db.job.count({ where: { status: "pending", scheduledAt: { lte: new Date() }, lead: { orgId } } }),
     db.pendingConfirmation.count({ where: { status: "pending" } }),
   ]);
 
@@ -55,11 +77,23 @@ async function getStatus(): Promise<string> {
 }
 
 async function handleConfirm(pendingId: string, slotIndex: number, chatId: number) {
+  const chatOrgId = await orgForChat(chatId);
   const pending = await db.pendingConfirmation.findUnique({ where: { id: pendingId } });
   if (!pending || pending.status !== "pending") {
     await replyToChat(chatId, "⚠️ This confirmation is no longer valid.");
     return;
   }
+
+  // The confirmation must belong to the chat's own org.
+  const lead = await db.lead.findUnique({
+    where: { id: pending.leadId },
+    select: { orgId: true },
+  });
+  if (!lead?.orgId || lead.orgId !== chatOrgId) {
+    await replyToChat(chatId, "⚠️ This confirmation is no longer valid.");
+    return;
+  }
+  const orgId = lead.orgId;
 
   const ctx = JSON.parse(pending.context) as {
     companyName: string; email: string;
@@ -70,12 +104,11 @@ async function handleConfirm(pendingId: string, slotIndex: number, chatId: numbe
   const rawSlot = ctx.slots[slotIndex] ?? ctx.slots[0];
   const slot = { start: new Date(rawSlot.start), end: new Date(rawSlot.end) };
 
-  const settings = await db.settings.findFirst({
-    where: { googleClientId: { not: null }, googleClientSecret: { not: null }, googleRefreshToken: { not: null } },
-    select: { googleClientId: true, googleClientSecret: true, googleRefreshToken: true, calendarId: true, fromEmail: true, fromName: true, resendApiKey: true },
-  });
+  const settings = await getSystemSettings(orgId);
+  const ownerToken = await getOrgOwnerGoogleToken(orgId);
+  const refreshToken = ownerToken?.refreshToken ?? settings.googleRefreshToken;
 
-  if (!settings?.googleClientId || !settings.googleClientSecret || !settings.googleRefreshToken) {
+  if (!settings.googleClientId || !settings.googleClientSecret || !refreshToken) {
     await replyToChat(chatId, "❌ Google Calendar not connected. Go to Settings to connect.");
     return;
   }
@@ -88,7 +121,7 @@ async function handleConfirm(pendingId: string, slotIndex: number, chatId: numbe
   });
 
   const event = await createEvent(
-    settings.googleClientId, settings.googleClientSecret, settings.googleRefreshToken,
+    settings.googleClientId, settings.googleClientSecret, refreshToken,
     settings.calendarId ?? "primary",
     slot,
     `Meeting with ${ctx.companyName}`,
@@ -121,7 +154,8 @@ async function handleConfirm(pendingId: string, slotIndex: number, chatId: numbe
     const resend = new Resend(settings.resendApiKey);
     const from = settings.fromName ? `${settings.fromName} <${settings.fromEmail}>` : settings.fromEmail;
     const body = `Great — I've booked our meeting for ${slotLabel}.${event.meetLink ? `\n\nGoogle Meet: ${event.meetLink}` : ""}\n\nLooking forward to it!`;
-    await resend.emails.send({ from, to: ctx.email, subject: `Meeting confirmed – ${ctx.companyName}`, text: body }).catch(() => null);
+    if (sendsDisabled()) dryRunSend(ctx.email, `Meeting confirmed – ${ctx.companyName}`);
+    else await resend.emails.send({ from, to: ctx.email, subject: `Meeting confirmed – ${ctx.companyName}`, text: body }).catch(() => null);
     await db.message.create({ data: { leadId: pending.leadId, direction: "outbound", subject: `Meeting confirmed – ${ctx.companyName}`, body } });
   }
 
@@ -136,8 +170,15 @@ async function handleConfirm(pendingId: string, slotIndex: number, chatId: numbe
 }
 
 async function handleSkip(pendingId: string, chatId: number) {
+  const chatOrgId = await orgForChat(chatId);
   const pending = await db.pendingConfirmation.findUnique({ where: { id: pendingId } });
   if (!pending) { await replyToChat(chatId, "⚠️ Not found."); return; }
+
+  const lead = await db.lead.findUnique({ where: { id: pending.leadId }, select: { orgId: true } });
+  if (!lead?.orgId || lead.orgId !== chatOrgId) {
+    await replyToChat(chatId, "⚠️ Not found.");
+    return;
+  }
 
   const ctx = JSON.parse(pending.context) as { companyName: string };
   await db.pendingConfirmation.update({ where: { id: pendingId }, data: { status: "skipped" } });
@@ -146,6 +187,10 @@ async function handleSkip(pendingId: string, chatId: number) {
 }
 
 export async function POST(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let update: TelegramUpdate;
   try {
     update = (await req.json()) as TelegramUpdate;
@@ -175,8 +220,30 @@ export async function POST(req: NextRequest) {
   }
 
   if (command === "/start") {
-    await db.settings.updateMany({
-      data: { telegramChatId: String(chatId) },
+    // /start <connect-code> binds this chat to the org that generated the code
+    // (Settings → Notifications → "Connect Telegram"). A bare /start no longer
+    // blindly claims every settings row.
+    const code = text.split(/\s+/)[1]?.trim();
+    if (!code) {
+      await replyToChat(
+        chatId,
+        "👋 To connect this chat, generate a connect code in LeadsWave Settings and send:\n/start <code>",
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    const settings = await db.settings.findFirst({
+      where: { telegramConnectCode: code },
+      select: { id: true },
+    });
+    if (!settings) {
+      await replyToChat(chatId, "❌ Invalid or expired connect code. Generate a new one in Settings.");
+      return NextResponse.json({ ok: true });
+    }
+
+    await db.settings.update({
+      where: { id: settings.id },
+      data: { telegramChatId: String(chatId), telegramConnectCode: null },
     });
     await replyToChat(
       chatId,
@@ -190,6 +257,13 @@ export async function POST(req: NextRequest) {
         "When AI is uncertain about booking, it will ask you here with /confirm and /skip options.",
       ].join("\n"),
     );
+    return NextResponse.json({ ok: true });
+  }
+
+  // Everything below requires a connected chat.
+  const orgId = await orgForChat(chatId);
+  if (!orgId) {
+    await replyToChat(chatId, "This chat isn't connected. Generate a connect code in LeadsWave Settings, then send /start <code>.");
     return NextResponse.json({ ok: true });
   }
 
@@ -209,7 +283,7 @@ export async function POST(req: NextRequest) {
 
   if (command === "/status") {
     try {
-      await replyToChat(chatId, await getStatus());
+      await replyToChat(chatId, await getStatus(orgId));
     } catch (err) {
       await replyToChat(chatId, `❌ Error: ${String(err)}`);
     }

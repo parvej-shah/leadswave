@@ -1,18 +1,21 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getOrgOwnerGoogleToken } from "@/lib/tenant";
+import { getSystemSettings } from "@/lib/settings";
 
 export async function GET() {
   const session = await auth();
-  if (!session?.user?.id) {
+  if (!session?.user?.id || !session.orgId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const settings = await db.settings.findFirst({
-    select: { googleRefreshToken: true, googleClientId: true, googleClientSecret: true },
-  });
+  // Token now lives on the org owner's User row; legacy Settings token kept as fallback.
+  const [ownerToken, settings] = await Promise.all([
+    getOrgOwnerGoogleToken(session.orgId),
+    getSystemSettings(session.orgId),
+  ]);
 
-  if (!settings?.googleRefreshToken) {
+  if (!ownerToken?.refreshToken && !settings.googleRefreshToken) {
     return NextResponse.json({ connected: false });
   }
 

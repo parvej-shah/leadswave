@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { db } from "@/lib/db";
-
-async function getUserId() {
-  const session = await auth();
-  return session?.user?.id ?? null;
-}
 
 function parseCSV(text: string): Record<string, string>[] {
   const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
@@ -95,8 +90,12 @@ function resolveHeaders(rawHeaders: string[]): Record<string, string> {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = await getUserId();
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireOrg();
+  } catch (e) {
+    return tenantErrorResponse(e);
+  }
 
   const body = await req.json();
   const { campaignId, csvText, columnMap } = body as {
@@ -108,7 +107,7 @@ export async function POST(req: NextRequest) {
   if (!campaignId) return NextResponse.json({ error: "campaignId required" }, { status: 400 });
   if (!csvText?.trim()) return NextResponse.json({ error: "csvText required" }, { status: 400 });
 
-  const campaign = await db.campaign.findUnique({ where: { id: campaignId, deletedAt: null } });
+  const campaign = await db.campaign.findFirst({ where: { id: campaignId, orgId: ctx.orgId, deletedAt: null } });
   if (!campaign) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
 
   const rows = parseCSV(csvText);
@@ -139,6 +138,7 @@ export async function POST(req: NextRequest) {
   const result = await db.lead.createMany({
     data: leads.map((l) => ({
       campaignId,
+      orgId: ctx.orgId,
       companyName: l.companyName ?? l.email ?? "Unknown",
       email: l.email ?? null,
       emailSource: l.email ? "imported" : null,

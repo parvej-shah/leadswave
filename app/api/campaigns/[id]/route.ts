@@ -1,20 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { db } from "@/lib/db";
 import { parseSelectedAreas, SelectedAreas } from "@/agents/scout/lib/areas";
 
-async function getUserId() {
-  const session = await auth();
-  return session?.user?.id ?? null;
-}
-
 export async function GET(_req: NextRequest, ctx: RouteContext<"/api/campaigns/[id]">) {
-  const userId = await getUserId();
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let org;
+  try {
+    org = await requireOrg();
+  } catch (e) {
+    return tenantErrorResponse(e);
+  }
 
   const { id } = await ctx.params;
   const campaign = await db.campaign.findFirst({
-    where: { id, deletedAt: null },
+    where: { id, orgId: org.orgId, deletedAt: null },
   });
 
   if (!campaign) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
@@ -22,8 +21,12 @@ export async function GET(_req: NextRequest, ctx: RouteContext<"/api/campaigns/[
 }
 
 export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/[id]">) {
-  const userId = await getUserId();
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let org;
+  try {
+    org = await requireOrg();
+  } catch (e) {
+    return tenantErrorResponse(e);
+  }
 
   const { id } = await ctx.params;
   const body = await req.json();
@@ -43,7 +46,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
   };
 
   const existing = await db.campaign.findFirst({
-    where: { id, deletedAt: null },
+    where: { id, orgId: org.orgId, deletedAt: null },
     select: { id: true },
   });
   if (!existing) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { db } from "@/lib/db";
 import { getSystemSettings } from "@/lib/settings";
 import FirecrawlApp from "@mendable/firecrawl-js";
@@ -22,10 +22,14 @@ const BATCH_DELAY_MS = 8000;
 const ENRICHMENT_CAP_PER_RUN = Number(process.env.ENRICHMENT_CAP_PER_RUN ?? 25);
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireOrg();
+  } catch (e) {
+    return tenantErrorResponse(e);
+  }
 
-  const settings = await getSystemSettings();
+  const settings = await getSystemSettings(ctx.orgId);
   if (!settings?.firecrawlApiKey) {
     return NextResponse.json({ error: "Firecrawl API key not configured in settings" }, { status: 400 });
   }
@@ -35,6 +39,7 @@ export async function POST(req: NextRequest) {
 
   // Target leads missing email (regardless of whether they have a website)
   const where = {
+    orgId: ctx.orgId,
     deletedAt: null,
     email: null,
     ...(campaignId ? { campaignId } : {}),

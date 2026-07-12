@@ -7,6 +7,7 @@ export async function saveNode(state: ScoutState): Promise<Partial<ScoutState>> 
   await db.lead.createMany({
     data: state.leads.map((l) => ({
       campaignId: state.campaignId,
+      orgId: state.orgId,
       companyName: l.companyName,
       website: l.website ?? null,
       email: l.email ?? null,

@@ -15,6 +15,8 @@ export default async function CampaignsPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
+  const orgId = session.orgId;
+  if (!orgId) redirect("/login");
 
   const params = await searchParams;
   const filter: StatusFilterValue = VALID_STATUSES.has(params.status as StatusFilterValue)
@@ -23,6 +25,7 @@ export default async function CampaignsPage({
 
   const campaigns = await db.campaign.findMany({
     where: {
+      orgId,
       deletedAt: null,
       ...(filter !== "all" ? { status: filter } : {}),
     },

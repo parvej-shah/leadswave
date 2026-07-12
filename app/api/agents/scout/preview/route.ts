@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { mapsScoutPreviewGraph } from "@/agents/scout/maps-graph";
 import { getSystemSettings } from "@/lib/settings";
+import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { parseSelectedAreas, SelectedAreas } from "@/agents/scout/lib/areas";
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireOrg();
+  } catch (e) {
+    return tenantErrorResponse(e);
+  }
 
   const { campaignId, cities: citiesOverride, areas: areasOverride } = (await req.json()) as {
     campaignId?: string;
@@ -17,8 +21,8 @@ export async function POST(req: NextRequest) {
   if (!campaignId) return NextResponse.json({ error: "campaignId required" }, { status: 400 });
 
   const [campaign, settings] = await Promise.all([
-    db.campaign.findUnique({ where: { id: campaignId } }),
-    getSystemSettings(),
+    db.campaign.findFirst({ where: { id: campaignId, orgId: ctx.orgId } }),
+    getSystemSettings(ctx.orgId),
   ]);
 
   if (!campaign) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
@@ -46,6 +50,7 @@ export async function POST(req: NextRequest) {
     selectedCities: citiesToUse,
     selectedAreas: areasToUse,
     campaignId: campaign.id,
+    orgId: ctx.orgId,
     googleMapsApiKey: settings.googleMapsApiKey,
     firecrawlApiKey: settings.firecrawlApiKey ?? "",
     maxPerCity: 300,

@@ -18,6 +18,7 @@ export async function loadContextNode(state: InboxState): Promise<Partial<InboxS
   return {
     lead: {
       id: lead.id,
+      orgId: lead.orgId,
       companyName: lead.companyName,
       email: lead.email,
       state: lead.state,

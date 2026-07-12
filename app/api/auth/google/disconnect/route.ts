@@ -1,16 +1,23 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 
 export async function DELETE() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireOrg();
+  } catch (e) {
+    return tenantErrorResponse(e);
   }
 
-  await db.settings.updateMany({
-    data: { googleRefreshToken: null },
-  });
+  // Clear the caller's own User token + this org's legacy Settings token only.
+  await Promise.all([
+    db.user.update({ where: { id: ctx.userId }, data: { googleRefreshToken: null } }),
+    db.settings.updateMany({
+      where: { orgId: ctx.orgId },
+      data: { googleRefreshToken: null },
+    }),
+  ]);
 
   return NextResponse.json({ ok: true });
 }

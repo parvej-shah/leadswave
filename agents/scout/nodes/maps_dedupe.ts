@@ -19,7 +19,7 @@ export async function mapsDedupeNode(state: MapsScoutState): Promise<Partial<Map
         })
       : Promise.resolve([] as { email: string | null }[]),
     emails.length
-      ? db.suppression.findMany({ where: { email: { in: emails } }, select: { email: true } })
+      ? db.suppression.findMany({ where: { orgId: state.orgId, email: { in: emails } }, select: { email: true } })
       : Promise.resolve([] as { email: string }[]),
   ]);
 

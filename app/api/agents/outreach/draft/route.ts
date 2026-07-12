@@ -1,20 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getSystemSettings } from "@/lib/settings";
+import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { loadContextNode } from "@/agents/outreach/nodes/load_context";
 import { personalizeNode } from "@/agents/outreach/nodes/personalize";
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireOrg();
+  } catch (e) {
+    return tenantErrorResponse(e);
+  }
 
   const { leadId } = (await req.json()) as { leadId?: string };
   if (!leadId) return NextResponse.json({ error: "leadId required" }, { status: 400 });
 
   const [lead, settings] = await Promise.all([
-    db.lead.findUnique({ where: { id: leadId } }),
-    getSystemSettings(),
+    db.lead.findFirst({ where: { id: leadId, orgId: ctx.orgId } }),
+    getSystemSettings(ctx.orgId),
   ]);
 
   if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });

@@ -29,6 +29,6 @@ export function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|offline|icon\\.png|apple-icon\\.png|icon-192\\.png|icon-512\\.png|icon-maskable-192\\.png|icon-maskable-512\\.png|api/auth|api/webhooks|api/telegram/webhook|api/cron).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|offline|icon\\.png|apple-icon\\.png|icon-192\\.png|icon-512\\.png|icon-maskable-192\\.png|icon-maskable-512\\.png|api/auth|api/webhooks|api/telegram/webhook|api/cron|invite).*)",
   ],
 };

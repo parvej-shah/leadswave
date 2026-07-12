@@ -13,17 +13,19 @@ export default async function DashboardLayout({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
+  const orgId = session.orgId;
+  if (!orgId) redirect("/login");
 
   const [campaignsRaw, inboxHotCount] = await Promise.all([
     db.campaign.findMany({
-      where: { deletedAt: null },
+      where: { orgId, deletedAt: null },
       orderBy: { createdAt: "desc" },
       take: 5,
       include: {
         leads: { where: { state: "replied" }, select: { id: true } },
       },
     }),
-    db.lead.count({ where: { state: "replied", deletedAt: null } }),
+    db.lead.count({ where: { orgId, state: "replied", deletedAt: null } }),
   ]);
 
   const campaigns: SidebarCampaign[] = campaignsRaw.map((c) => ({

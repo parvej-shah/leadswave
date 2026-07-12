@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { inboxGraph } from "@/agents/inbox/graph";
+import { getSystemSettings } from "@/lib/settings";
 import { Resend } from "resend";
 
 type EmailPayload = {
@@ -95,10 +96,43 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing from address" }, { status: 400 });
   }
 
-  // Single-tenant MVP: pick the most complete settings row (prefer one with resendApiKey)
-  const settings = await db.settings.findFirst({
-    where: { resendApiKey: { not: null } },
-  }) ?? await db.settings.findFirst();
+  // Find the lead by sender email. The match is necessarily global (Resend has
+  // no org concept), so when the same prospect exists in several orgs we
+  // disambiguate by the webhook's `to` address against each org's fromEmail,
+  // falling back to the most recently touched lead.
+  const candidates = await db.lead.findMany({
+    where: { email: { equals: fromEmail, mode: "insensitive" }, deletedAt: null },
+    orderBy: { lastTouchedAt: "desc" },
+  });
+
+  if (candidates.length === 0) {
+    console.log(`[inbound] No lead found for ${fromEmail} — ignoring`);
+    return NextResponse.json({ ok: true, skipped: true });
+  }
+
+  let lead = candidates[0];
+  const distinctOrgs = new Set(candidates.map((l) => l.orgId));
+  if (distinctOrgs.size > 1) {
+    const toAddresses = (Array.isArray(email.to) ? email.to : [email.to ?? ""])
+      .map((a) => extractEmail(a ?? ""))
+      .filter(Boolean);
+    const orgSettings = await db.settings.findMany({
+      where: { orgId: { in: [...distinctOrgs] as string[] }, fromEmail: { not: null } },
+      select: { orgId: true, fromEmail: true },
+    });
+    const matchedOrg = orgSettings.find(
+      (s) => s.fromEmail && toAddresses.includes(s.fromEmail.toLowerCase()),
+    )?.orgId;
+    if (matchedOrg) {
+      lead = candidates.find((l) => l.orgId === matchedOrg) ?? lead;
+    } else {
+      console.warn(
+        `[inbound] Ambiguous sender ${fromEmail} across ${distinctOrgs.size} orgs; using most recently touched lead ${lead.id}`,
+      );
+    }
+  }
+
+  const settings = await getSystemSettings(lead.orgId!);
 
   // Resend receiving webhooks may include metadata only.
   // If body is empty, fetch the full receiving-email record via Resend API.
@@ -123,23 +157,7 @@ export async function POST(req: NextRequest) {
   }
 
   body = stripQuotedReply(body);
-  console.log(`[inbound] from=${fromEmail} subject="${subject}" in-reply-to=${inReplyTo} bodyLen=${body.length}`);
-
-  // Find the lead by email
-  const lead = await db.lead.findFirst({
-    where: { email: { equals: fromEmail, mode: "insensitive" }, deletedAt: null },
-    orderBy: { lastTouchedAt: "desc" },
-  });
-
-  if (!lead) {
-    console.log(`[inbound] No lead found for ${fromEmail} — ignoring`);
-    return NextResponse.json({ ok: true, skipped: true });
-  }
-
-  if (!settings) {
-    console.error("[inbound] No settings found — cannot classify");
-    return NextResponse.json({ ok: true, classified: false });
-  }
+  console.log(`[inbound] from=${fromEmail} subject="${subject}" in-reply-to=${inReplyTo} bodyLen=${body.length} org=${lead.orgId}`);
 
   if (!body) {
     console.warn(`[inbound] Empty body for lead ${lead.id}; skipping save/classification to avoid false state updates`);

@@ -8,8 +8,56 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+model User {
+  id                 String       @id @default(cuid())
+  email              String       @unique // stable identity — NextAuth token.sub is NOT stable here
+  googleSub          String?      @unique // account.providerAccountId, backfilled on login
+  name               String?
+  image              String?
+  googleRefreshToken String?      // powers calendar booking; encrypted at rest
+  defaultOrgId       String?      // which membership's org the JWT binds to (invite acceptance sets this)
+  memberships        Membership[]
+  createdAt          DateTime     @default(now())
+}
+
+model Organization {
+  id          String       @id @default(cuid())
+  name        String
+  memberships Membership[]
+  invites     Invite[]
+  createdAt   DateTime     @default(now())
+}
+
+model Membership {
+  id        String       @id @default(cuid())
+  userId    String
+  orgId     String
+  role      String       @default("member") // owner | admin | member
+  user      User         @relation(fields: [userId], references: [id])
+  org       Organization @relation(fields: [orgId], references: [id])
+  createdAt DateTime     @default(now())
+
+  @@unique([userId, orgId])
+}
+
+model Invite {
+  id          String       @id @default(cuid())
+  orgId       String
+  email       String
+  role        String       @default("member")
+  token       String       @unique @default(cuid())
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  invitedById String
+  org         Organization @relation(fields: [orgId], references: [id])
+  createdAt   DateTime     @default(now())
+
+  @@index([email])
+}
+
 model Campaign {
   id             String    @id @default(cuid())
+  orgId          String
   name           String
   query          String
   location       String
@@ -23,12 +71,32 @@ model Campaign {
   status         String    @default("active") // active | paused | completed
   autoSend       Boolean   @default(false)
   leads          Lead[]
+  offers         CampaignOffer[]
   createdAt      DateTime  @default(now())
   deletedAt      DateTime?
+
+  @@index([orgId])
+}
+
+model CampaignOffer {
+  id          String   @id @default(cuid())
+  campaignId  String
+  key         String   // stable slug stored in Lead.category (e.g. "website_proposal")
+  label       String   // display name (e.g. "Website build")
+  matchSignal String   @default("always") // has_website | no_website | always
+  offerText   String
+  angle       String? // background framing fed to the AI (soft mention only)
+  order       Int      @default(0)
+  campaign    Campaign @relation(fields: [campaignId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@unique([campaignId, key])
+  @@index([campaignId])
 }
 
 model Lead {
   id            String    @id @default(cuid())
+  orgId         String // denormalized from campaign for direct scoping
   campaignId    String
   companyName   String
   website       String?
@@ -57,6 +125,7 @@ model Lead {
   deletedAt     DateTime?
 
   @@unique([campaignId, placeId])
+  @@index([orgId])
 }
 
 model Message {
@@ -84,7 +153,8 @@ model Job {
 
 model Settings {
   id                   String   @id @default(cuid())
-  userId               String   @unique
+  orgId                String   @unique // per-org settings
+  userId               String   @unique // legacy token.sub provenance; superseded by orgId
   offerText            String?
   fromEmail            String?
   fromName             String?
@@ -99,6 +169,7 @@ model Settings {
   apifyApiKey          String?  // Apify token — fallback email finder when Hunter quota is spent
   googleMapsApiKey     String?
   telegramChatId       String?
+  telegramConnectCode  String?  @unique // short-lived code binding /start <code> to this org
   googleClientId       String?
   googleClientSecret   String?
   googleRefreshToken   String?
@@ -125,9 +196,13 @@ model CalendarEvent {
 
 model Suppression {
   id        String   @id @default(cuid())
-  email     String   @unique
+  orgId     String
+  email     String
   reason    String   // bounced | unsubscribed | manual | complained
   createdAt DateTime @default(now())
+
+  @@unique([orgId, email])
+  @@index([orgId])
 }
 
 model PendingConfirmation {

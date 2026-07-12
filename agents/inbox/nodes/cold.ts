@@ -13,11 +13,17 @@ export async function coldNode(state: InboxState): Promise<Partial<InboxState>> 
   });
 
   if (state.lead.email) {
-    await db.suppression.upsert({
-      where: { email: state.lead.email },
-      update: {},
-      create: { email: state.lead.email, reason: "unsubscribed" },
+    // Scoped find-or-create instead of upsert-by-email: works before AND after
+    // the Suppression unique constraint moves from global email to [orgId, email].
+    const email = state.lead.email.toLowerCase();
+    const existing = await db.suppression.findFirst({
+      where: { orgId: state.lead.orgId, email },
     });
+    if (!existing) {
+      await db.suppression.create({
+        data: { orgId: state.lead.orgId, email, reason: "unsubscribed" },
+      });
+    }
   }
 
   return {};

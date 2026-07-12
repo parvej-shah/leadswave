@@ -1,20 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getSystemSettings } from "@/lib/settings";
+import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { parseSelectedAreas } from "@/agents/scout/lib/areas";
 
-async function getUserId() {
-  const session = await auth();
-  return session?.user?.id ?? null;
-}
-
 export async function GET() {
-  const userId = await getUserId();
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireOrg();
+  } catch (e) {
+    return tenantErrorResponse(e);
+  }
 
   const campaigns = await db.campaign.findMany({
-    where: { deletedAt: null },
+    where: { orgId: ctx.orgId, deletedAt: null },
     orderBy: { createdAt: "desc" },
     include: { _count: { select: { leads: true } } },
   });
@@ -23,8 +22,12 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = await getUserId();
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireOrg();
+  } catch (e) {
+    return tenantErrorResponse(e);
+  }
 
   const body = await req.json();
   const {
@@ -64,10 +67,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const settings = await getSystemSettings();
+  const settings = await getSystemSettings(ctx.orgId);
 
   const campaign = await db.campaign.create({
     data: {
+      orgId: ctx.orgId,
       name,
       query: resolvedQuery,
       location: resolvedLocation,

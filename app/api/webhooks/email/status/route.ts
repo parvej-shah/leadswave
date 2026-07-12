@@ -64,15 +64,23 @@ export async function POST(req: NextRequest) {
   if (TERMINAL_STATUSES.has(newStatus)) {
     const lead = await db.lead.findUnique({
       where: { id: message.leadId },
-      select: { email: true, id: true, companyName: true, state: true },
+      select: { email: true, id: true, companyName: true, state: true, orgId: true },
     });
 
     if (lead?.email) {
-      await db.suppression.upsert({
-        where: { email: lead.email },
-        create: { email: lead.email, reason: newStatus },
-        update: { reason: newStatus },
+      // Scoped find-or-create instead of upsert-by-email: works before AND after
+      // the Suppression unique constraint moves from global email to [orgId, email].
+      const email = lead.email.toLowerCase();
+      const existing = await db.suppression.findFirst({
+        where: { orgId: lead.orgId, email },
       });
+      if (existing) {
+        await db.suppression.update({ where: { id: existing.id }, data: { reason: newStatus } });
+      } else {
+        await db.suppression.create({
+          data: { orgId: lead.orgId, email, reason: newStatus },
+        });
+      }
 
       await db.lead.update({
         where: { id: lead.id },
@@ -84,10 +92,13 @@ export async function POST(req: NextRequest) {
         data: { status: "cancelled" },
       });
 
-      const settings = await db.settings.findFirst({
-        where: { telegramChatId: { not: null } },
-        select: { telegramChatId: true },
-      });
+      // Notify the org that owns the lead — never another tenant's chat.
+      const settings = lead.orgId
+        ? await db.settings.findUnique({
+            where: { orgId: lead.orgId },
+            select: { telegramChatId: true },
+          })
+        : null;
 
       if (settings?.telegramChatId) {
         const icon = newStatus === "bounced" ? "🔴" : "⚠️";

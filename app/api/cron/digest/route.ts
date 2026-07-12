@@ -14,12 +14,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const settings = await db.settings.findFirst({
-    select: { telegramChatId: true, notifyEmailDigest: true },
+  // One digest per org that opted in
+  const orgSettings = await db.settings.findMany({
+    where: { notifyEmailDigest: true, telegramChatId: { not: null } },
+    select: { orgId: true, telegramChatId: true },
   });
 
-  if (!settings?.notifyEmailDigest || !settings.telegramChatId) {
-    return NextResponse.json({ ok: true, skipped: true, reason: "digest disabled or no chat ID" });
+  if (orgSettings.length === 0) {
+    return NextResponse.json({ ok: true, skipped: true, reason: "no org has digest enabled" });
   }
 
   const now = new Date();
@@ -29,46 +31,53 @@ export async function POST(req: NextRequest) {
   const yesterdayEnd = new Date(yesterdayStart);
   yesterdayEnd.setUTCDate(yesterdayEnd.getUTCDate() + 1);
 
-  const [sent, replies, hotLeads, meetings, newLeads] = await Promise.all([
-    db.message.count({
-      where: { direction: "outbound", sentAt: { gte: yesterdayStart, lt: yesterdayEnd } },
-    }),
-    db.message.count({
-      where: { direction: "inbound", sentAt: { gte: yesterdayStart, lt: yesterdayEnd } },
-    }),
-    db.lead.count({
-      where: { state: "replied", lastTouchedAt: { gte: yesterdayStart, lt: yesterdayEnd } },
-    }),
-    db.lead.count({
-      where: { state: "meeting_booked", lastTouchedAt: { gte: yesterdayStart, lt: yesterdayEnd } },
-    }),
-    db.lead.count({
-      where: { createdAt: { gte: yesterdayStart, lt: yesterdayEnd } },
-    }),
-  ]);
+  const results: Record<string, unknown>[] = [];
 
-  const dateLabel = yesterdayStart.toLocaleDateString("en-US", {
-    weekday: "long", month: "short", day: "numeric",
-  });
+  for (const { orgId, telegramChatId } of orgSettings) {
+    if (!orgId || !telegramChatId) continue;
 
-  const lines = [
-    `📊 <b>Daily Digest — ${dateLabel}</b>`,
-    "",
-    `✉️ Emails sent: <b>${sent}</b>`,
-    `📥 Replies received: <b>${replies}</b>`,
-    `🔥 HOT leads: <b>${hotLeads}</b>`,
-    `📅 Meetings booked: <b>${meetings}</b>`,
-    `👥 New leads scouted: <b>${newLeads}</b>`,
-  ];
+    const [sent, replies, hotLeads, meetings, newLeads] = await Promise.all([
+      db.message.count({
+        where: { direction: "outbound", sentAt: { gte: yesterdayStart, lt: yesterdayEnd }, lead: { orgId } },
+      }),
+      db.message.count({
+        where: { direction: "inbound", sentAt: { gte: yesterdayStart, lt: yesterdayEnd }, lead: { orgId } },
+      }),
+      db.lead.count({
+        where: { orgId, state: "replied", lastTouchedAt: { gte: yesterdayStart, lt: yesterdayEnd } },
+      }),
+      db.lead.count({
+        where: { orgId, state: "meeting_booked", lastTouchedAt: { gte: yesterdayStart, lt: yesterdayEnd } },
+      }),
+      db.lead.count({
+        where: { orgId, createdAt: { gte: yesterdayStart, lt: yesterdayEnd } },
+      }),
+    ]);
 
-  if (hotLeads > 0 || meetings > 0) {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-    lines.push("", `→ ${appUrl}/inbox`);
+    const dateLabel = yesterdayStart.toLocaleDateString("en-US", {
+      weekday: "long", month: "short", day: "numeric",
+    });
+
+    const lines = [
+      `📊 <b>Daily Digest — ${dateLabel}</b>`,
+      "",
+      `✉️ Emails sent: <b>${sent}</b>`,
+      `📥 Replies received: <b>${replies}</b>`,
+      `🔥 HOT leads: <b>${hotLeads}</b>`,
+      `📅 Meetings booked: <b>${meetings}</b>`,
+      `👥 New leads scouted: <b>${newLeads}</b>`,
+    ];
+
+    if (hotLeads > 0 || meetings > 0) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+      lines.push("", `→ ${appUrl}/inbox`);
+    }
+
+    await sendTelegramMessage(telegramChatId, lines.join("\n")).catch(() => {});
+    results.push({ orgId, sent, replies, hotLeads, meetings, newLeads });
   }
 
-  await sendTelegramMessage(settings.telegramChatId, lines.join("\n"));
-
-  return NextResponse.json({ ok: true, sent, replies, hotLeads, meetings, newLeads });
+  return NextResponse.json({ ok: true, orgs: results });
 }
 
 export async function GET(req: NextRequest) {

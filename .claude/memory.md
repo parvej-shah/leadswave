@@ -11,6 +11,22 @@ Format: one bullet per item, newest on top. Convert relative dates to absolute.
 
 ## Live decisions
 
+- **Multi-tenancy shipped (Stage A of SaaS plan).** New models: User/Organization/Membership/
+  Invite; `orgId` (NOT NULL) on Campaign/Lead/Settings/Suppression; Suppression unique is now
+  `[orgId, email]` (global email unique dropped). All data backfilled to org "XpeedLab" owned by
+  parvejshahlabib007@gmail.com; 5 stale duplicate Settings rows deleted (old auth bug created
+  them). KEY FACT: NextAuth token.sub is NOT stable here — User is keyed by EMAIL, googleSub =
+  account.providerAccountId. Session carries orgId+role via jwt self-heal; seam is
+  `lib/tenant.ts` (requireOrg/requireRole, explicit orgId filters — no $extends middleware).
+  Cron/webhooks derive org from records (job→lead→orgId etc.). API keys now AES-256-GCM
+  encrypted at rest (`lib/crypto.ts`, SETTINGS_ENCRYPTION_KEY in .env.local — MUST also be set
+  in Vercel, plus CRON_SECRET + TELEGRAM_WEBHOOK_SECRET). Settings GET masks secrets; PUT
+  ignores masked echoes. Telegram /start now needs a connect code
+  (POST /api/settings/telegram-connect); owner's existing chat binding preserved.
+  `SEND_DISABLED=true` = global dry-run. process-jobs now checks Suppression before sending
+  (was a real gap) and enforces per-org dailySendLimit. Fixed invariants drift: keys were
+  plaintext before this. Team tab in Settings; invites at /invite/[token], User.defaultOrgId
+  picks the active org. (2026-07-12)
 - **Maps scout searches Gemini-suggested hotspot areas per city.** New wizard/scout-page
   step: `suggest-areas` route → user picks areas → stored in `Campaign.selectedAreas`
   (Json, city → string[], added via `prisma db push`). `maps_search.ts` geocodes each area

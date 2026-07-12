@@ -19,6 +19,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { RichTextViewer } from "@/components/rich-text-viewer";
 import { htmlToPlainTextClient, stripUrls } from "@/lib/html/plain";
+import { TeamPanel } from "./team-panel";
 
 type Settings = {
   offerText: string;
@@ -46,7 +47,7 @@ type Settings = {
   notifyEmailDigest: boolean;
 };
 
-type TabKey = "outreach" | "keys" | "calendar" | "limits" | "notifications" | "connection";
+type TabKey = "outreach" | "keys" | "calendar" | "limits" | "notifications" | "connection" | "team";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "outreach", label: "Outreach" },
@@ -55,6 +56,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "limits", label: "Sending Limits" },
   { key: "notifications", label: "Notifications" },
   { key: "connection", label: "Connection" },
+  { key: "team", label: "Team" },
 ];
 
 const DEFAULTS: Settings = {
@@ -646,7 +648,10 @@ export default function SettingsPage() {
           </Card>
         )}
 
-        {/* Save bar */}
+        {tab === "team" && <TeamPanel />}
+
+        {/* Save bar (team tab manages itself — no form fields to save) */}
+        {tab !== "team" && (
         <div className="flex items-center gap-3 pt-4 border-t border-border">
           <Button type="submit" disabled={saving || !isDirty} iconStart={saving ? "refresh" : undefined}>
             {saving ? "Saving…" : "Save Changes"}
@@ -662,6 +667,7 @@ export default function SettingsPage() {
             </Toast>
           )}
         </div>
+        )}
       </form>
     </div>
   );

@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { db } from "@/lib/db";
 
 export async function GET(_req: NextRequest, ctx: RouteContext<"/api/leads/[id]">) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let org;
+  try {
+    org = await requireOrg();
+  } catch (e) {
+    return tenantErrorResponse(e);
+  }
 
   const { id } = await ctx.params;
 
   const lead = await db.lead.findFirst({
-    where: { id, deletedAt: null },
+    where: { id, orgId: org.orgId, deletedAt: null },
     include: {
       campaign: { select: { id: true, name: true } },
       messages: { orderBy: { sentAt: "asc" } },

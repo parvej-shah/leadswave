@@ -9,7 +9,7 @@ export async function dedupeNode(state: ScoutState): Promise<Partial<ScoutState>
     .filter((e): e is string => !!e);
 
   const suppressed = await db.suppression.findMany({
-    where: { email: { in: emails } },
+    where: { orgId: state.orgId, email: { in: emails } },
     select: { email: true },
   });
   const suppressedSet = new Set(suppressed.map((s) => s.email));

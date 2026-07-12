@@ -1,21 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-
-async function getUserId() {
-  const session = await auth();
-  return session?.user?.id ?? null;
-}
+import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 
 export async function GET(req: NextRequest) {
-  const userId = await getUserId();
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireOrg();
+  } catch (e) {
+    return tenantErrorResponse(e);
+  }
 
   const { searchParams } = new URL(req.url);
   const campaignId = searchParams.get("campaignId");
 
   const leads = await db.lead.findMany({
     where: {
+      orgId: ctx.orgId,
       deletedAt: null,
       ...(campaignId ? { campaignId } : {}),
     },
@@ -30,20 +30,32 @@ export async function GET(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const userId = await getUserId();
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireOrg();
+  } catch (e) {
+    return tenantErrorResponse(e);
+  }
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-  await db.lead.update({ where: { id }, data: { deletedAt: new Date() } });
+  const { count } = await db.lead.updateMany({
+    where: { id, orgId: ctx.orgId },
+    data: { deletedAt: new Date() },
+  });
+  if (count === 0) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
 
 export async function PATCH(req: NextRequest) {
-  const userId = await getUserId();
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireOrg();
+  } catch (e) {
+    return tenantErrorResponse(e);
+  }
 
   try {
     const body = await req.json();
@@ -53,14 +65,16 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Lead ID is required" }, { status: 400 });
     }
 
+    const current = await db.lead.findFirst({
+      where: { id, orgId: ctx.orgId },
+      select: { email: true },
+    });
+    if (!current) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+
     // A manually changed email invalidates stored verification — otherwise a
     // stale "invalid" status keeps blocking sends to the corrected address.
     const newEmail = email !== undefined ? (email ? (email as string).trim() : null) : undefined;
-    let emailChanged = false;
-    if (newEmail !== undefined) {
-      const current = await db.lead.findUnique({ where: { id }, select: { email: true } });
-      emailChanged = newEmail !== (current?.email ?? null);
-    }
+    const emailChanged = newEmail !== undefined && newEmail !== (current.email ?? null);
 
     const updated = await db.lead.update({
       where: { id },
@@ -89,4 +103,3 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: error.message || "Failed to update lead" }, { status: 500 });
   }
 }
-
