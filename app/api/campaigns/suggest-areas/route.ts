@@ -10,13 +10,18 @@ async function getUserId() {
 export type SuggestedArea = { area: string; reason: string; score: number };
 export type CityAreas = { city: string; areas: SuggestedArea[] };
 
-const CITIES_PER_BATCH = 5;
-const MAX_AREAS_PER_CITY = 8;
+// Cities are batched smaller now because each city returns many more areas —
+// keeps every Gemini response well under the JSON-truncation limit.
+const CITIES_PER_BATCH = 3;
+// Generous safety cap; the score threshold does the real filtering, not this.
+const MAX_AREAS_PER_CITY = 40;
+// Areas scoring below this are dropped as too sparse to bother scouting.
+const MIN_AREA_SCORE = 20;
 
 function buildPrompt(businessType: string, country: string, cities: string[]): string {
   return `You are a local business intelligence analyst with detailed knowledge of ${country}'s cities.
 
-Task: For EACH city listed below, identify the 5-8 named areas (neighborhoods, commercial districts, market areas, business hubs) with the HIGHEST concentration of "${businessType}" businesses.
+Task: For EACH city listed below, identify EVERY named area (neighborhood, commercial district, market area, business hub) that has a meaningful concentration of "${businessType}" businesses. Be exhaustive — list ALL such areas, not just the top few. Large cities may have 20-40+ qualifying areas; smaller cities fewer. Include every area worth scouting.
 
 Cities: ${cities.join(", ")}
 
@@ -25,6 +30,7 @@ Hard requirements:
 - Use the locally-used name, transliterated to Latin script.
 - Do NOT invent names. Do NOT return street addresses, individual malls/buildings, or the city name itself.
 - Order areas best-first by density of "${businessType}" businesses.
+- Assign each area a score 1-100 for its relative density. Only include areas that genuinely have these businesses — it is fine to return many areas, but do not pad the list with areas that have almost none.
 
 Return JSON only, no prose, no markdown fences:
 {"cities":[{"city":"<exact city name as given above>","areas":[{"area":"string","reason":"one short phrase why this area has many of these businesses","score":0}]}]}
@@ -59,6 +65,7 @@ function parseBatch(text: string, requestedCities: string[]): CityAreas[] {
       .filter((a) => {
         const key = a.area.toLowerCase();
         if (key === city.toLowerCase() || seen.has(key)) return false;
+        if (a.score < MIN_AREA_SCORE) return false;
         seen.add(key);
         return true;
       })
