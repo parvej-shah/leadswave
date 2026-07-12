@@ -46,6 +46,8 @@ type Campaign = {
   status: string;
   autoSend: boolean;
   createdAt: string;
+  selectedCities: string[];
+  selectedAreas: Record<string, string[]> | null;
 };
 
 type CampaignStats = {
@@ -110,6 +112,7 @@ export default function CampaignDetailPage() {
     emailsFound: number;
     channelsFound?: number;
     total: number;
+    error?: string;
   } | null>(null);
   const [togglingAutoSend, setTogglingAutoSend] = useState(false);
   const [stats, setStats] = useState<CampaignStats | null>(null);
@@ -264,12 +267,12 @@ export default function CampaignDetailPage() {
   }, {});
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-3.5">
       {/* Header */}
       <div>
         <Link
           href="/campaigns"
-          className="font-mono text-[11px] text-fg-4 hover:text-fg-2 inline-flex items-center gap-1.5 mb-3 transition-colors duration-150"
+          className="font-mono text-[11px] text-fg-4 hover:text-fg-2 inline-flex items-center gap-1.5 mb-2 transition-colors duration-150"
         >
           ← Campaigns
         </Link>
@@ -292,6 +295,27 @@ export default function CampaignDetailPage() {
                 <><span className="text-fg-2">{leads.length}</span> leads</>
               )}
             </p>
+            {campaign.selectedCities?.length > 0 && (
+              <div className="flex flex-col gap-1 mt-1.5">
+                {campaign.selectedCities.map((city) => {
+                  const areas = campaign.selectedAreas?.[city] ?? [];
+                  return (
+                    <div key={city} className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full border border-border bg-surface font-mono text-[10px] text-fg-3">
+                        {city}
+                      </span>
+                      {areas.length > 0 ? (
+                        <span className="font-mono text-[10px] text-fg-5">
+                          {areas.join(" · ")}
+                        </span>
+                      ) : (
+                        <span className="font-mono text-[10px] text-fg-5 italic">city-wide</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <div className="flex items-center flex-wrap gap-2 lg:shrink-0">
             <button
@@ -343,13 +367,30 @@ export default function CampaignDetailPage() {
                 Edit
               </Button>
             </Link>
+            <Input
+              placeholder="Search leads…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {(searchQuery || stateFilter !== "all") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearchQuery("");
+                  setStateFilter("all");
+                }}
+              >
+                Clear
+              </Button>
+            )}
           </div>
         </div>
       </div>
 
       {/* Campaign stats */}
       {stats && stats.totalLeads > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5">
           <StatTile label="Leads" value={stats.totalLeads} sub={`${stats.withEmail} with email`} />
           <StatTile
             label="Contacted"
@@ -409,27 +450,6 @@ export default function CampaignDetailPage() {
             </button>
           );
         })}
-      </div>
-
-      {/* Filters */}
-      <div className="flex items-center gap-2">
-        <Input
-          placeholder="Search leads…"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-        {(searchQuery || stateFilter !== "all") && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setSearchQuery("");
-              setStateFilter("all");
-            }}
-          >
-            Clear
-          </Button>
-        )}
       </div>
 
       {/* Table */}
@@ -686,14 +706,16 @@ function StatTile({
   const valueColor = color ? colorMap[color] : "text-fg-1";
 
   return (
-    <div className="bg-surface border border-border rounded-xl px-4 py-3 flex flex-col gap-0.5">
-      <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">{label}</span>
-      <span className={`font-sans text-[22px] font-semibold tracking-tight leading-none ${valueColor}`}>
-        {value}
+    <div className="bg-surface border border-border rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+      <span className="font-mono text-[10px] uppercase tracking-[0.06em] text-fg-4">{label}</span>
+      <span className="flex items-baseline gap-1.5">
+        <span className={`font-sans text-[15px] font-semibold tracking-tight leading-none ${valueColor}`}>
+          {value}
+        </span>
+        {sub && (
+          <span className="font-mono text-[9.5px] text-fg-5 whitespace-nowrap">{sub}</span>
+        )}
       </span>
-      {sub && (
-        <span className="font-mono text-[10px] text-fg-5 mt-0.5">{sub}</span>
-      )}
     </div>
   );
 }
