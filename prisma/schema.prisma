@@ -16,6 +16,7 @@ model Campaign {
   offerText      String
   country        String?
   selectedCities String[]  @default([])
+  selectedAreas  Json?     // { [city: string]: string[] } — user-selected hotspot areas per city
   businessType   String?
   websiteOffer   String?
   crmOffer       String?

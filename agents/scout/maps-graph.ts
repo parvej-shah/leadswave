@@ -30,12 +30,23 @@ const MapsScoutAnnotation = Annotation.Root({
   businessType: Annotation<string>(),
   country: Annotation<string>(),
   selectedCities: Annotation<string[]>(),
+  // Hotspot areas per city ({ [city]: string[] }); cities without areas use the quadrant fallback
+  selectedAreas: Annotation<Record<string, string[]>, Record<string, string[]>>({
+    value: (_prev, next) => next,
+    default: () => ({}),
+  }),
   campaignId: Annotation<string>(),
   googleMapsApiKey: Annotation<string>(),
   firecrawlApiKey: Annotation<string>(),
+  // Quadrant-fallback budget for cities without selected areas
   maxPerCity: Annotation<number, number>({
     value: (_prev, next) => next,
-    default: () => 60,
+    default: () => 300,
+  }),
+  // Per-hotspot-area budget; 100 = Places API pagination ceiling per query. No per-city cap.
+  maxPerArea: Annotation<number, number>({
+    value: (_prev, next) => next,
+    default: () => 100,
   }),
   places: Annotation<PlaceLite[], PlaceLite[]>({
     value: (_prev, next) => next,

@@ -9,7 +9,9 @@
 
 **Triggered by:** user launches a campaign → `app/api/agents/scout/route.ts`.
 
-**Inputs:** `{ campaignId, query, location }` (+ city selection on the Maps path).
+**Inputs:** `{ campaignId, query, location }` (+ city & hotspot-area selection on the Maps
+path — `Campaign.selectedAreas` Json maps city → areas; cities without areas fall back to
+the quadrant grid search).
 
 **Output:** new `Lead` rows at `state = "discovered"`, deduped against existing leads;
 Telegram "found N leads" ping.

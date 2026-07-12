@@ -11,6 +11,13 @@ Format: one bullet per item, newest on top. Convert relative dates to absolute.
 
 ## Live decisions
 
+- **Maps scout searches Gemini-suggested hotspot areas per city.** New wizard/scout-page
+  step: `suggest-areas` route → user picks areas → stored in `Campaign.selectedAreas`
+  (Json, city → string[], added via `prisma db push`). `maps_search.ts` geocodes each area
+  (skips hallucinated names >40km from city centre), searches 4km radius, budget 100/area
+  (Places pagination max), **no per-city lead cap** — API calls bounded by 3 variants/area.
+  Cities without areas use the old quadrant grid, budget raised 60→300. (2026-07-12)
+
 - **Rich text: reusable editor + viewer; signature appended at send-time.**
   `components/rich-text-editor.tsx` (Tiptap v3, `immediatelyRender:false` for SSR) +
   `components/rich-text-viewer.tsx` are the shared surfaces. HTML sanitized at the WRITE

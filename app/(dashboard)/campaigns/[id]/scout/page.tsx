@@ -7,6 +7,8 @@ import { Button, Toast, CategoryBadge, Icon } from "@/components/ui";
 import { MapsLead } from "@/agents/scout/maps-graph";
 
 type SuggestedCity = { city: string; reason: string; score: number };
+type SuggestedArea = { area: string; reason: string; score: number };
+type CityAreas = { city: string; areas: SuggestedArea[] };
 
 const RUNNING_MESSAGES = [
   "Searching Google Maps…",
@@ -127,7 +129,7 @@ function LeadRow({ lead, checked, onToggle }: LeadRowProps) {
   );
 }
 
-type ViewPhase = "loading-campaign" | "pick-cities" | "loading-cities" | "scouting" | "review" | "done" | "enriching" | "error";
+type ViewPhase = "loading-campaign" | "pick-cities" | "loading-cities" | "loading-areas" | "pick-areas" | "scouting" | "review" | "done" | "enriching" | "error";
 
 export default function CampaignScoutPage() {
   const params = useParams();
@@ -151,6 +153,12 @@ export default function CampaignScoutPage() {
 
   // Selected cities to use when scouting (either from campaign or picker)
   const [citiesToScout, setCitiesToScout] = useState<string[] | null>(null);
+
+  // Area picker state (shown after picking cities)
+  const [suggestedAreasByCity, setSuggestedAreasByCity] = useState<CityAreas[]>([]);
+  const [selectedAreas, setSelectedAreas] = useState<Record<string, Set<string>>>({});
+  // Areas override to use when scouting (null = use campaign's stored areas)
+  const [areasToScout, setAreasToScout] = useState<Record<string, string[]> | null>(null);
 
   const allSelected = leads.length > 0 && selected.size === leads.length;
 
@@ -205,9 +213,10 @@ export default function CampaignScoutPage() {
     });
   }
 
-  const runPreview = useCallback(async (cities?: string[]) => {
+  const runPreview = useCallback(async (cities?: string[], areas?: Record<string, string[]>) => {
     const body: Record<string, unknown> = { campaignId };
     if (cities) body.cities = cities;
+    if (areas) body.areas = areas;
     const res = await fetch("/api/agents/scout/preview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -221,7 +230,7 @@ export default function CampaignScoutPage() {
   // Trigger scouting when phase transitions to "scouting"
   useEffect(() => {
     if (phase !== "scouting") return;
-    runPreview(citiesToScout ?? undefined)
+    runPreview(citiesToScout ?? undefined, areasToScout ?? undefined)
       .then((l) => {
         setLeads(l);
         setSelected(new Set(l.map((_, i) => i)));
@@ -234,10 +243,44 @@ export default function CampaignScoutPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  function launchScout() {
+  async function launchScout() {
     if (selectedCities.size === 0) return;
     const cities = Array.from(selectedCities);
     setCitiesToScout(cities);
+    setPhase("loading-areas");
+    try {
+      const res = await fetch("/api/campaigns/suggest-areas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessType: campaign?.businessType ?? "", country: campaign?.country ?? "", cities }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to suggest areas");
+      const byCity = (data.areas ?? []) as CityAreas[];
+      setSuggestedAreasByCity(byCity);
+      setSelectedAreas(Object.fromEntries(byCity.map((c) => [c.city, new Set(c.areas.map((a) => a.area))])));
+      setPhase("pick-areas");
+    } catch {
+      // Non-blocking: no area suggestions → scout city-wide (quadrant fallback)
+      setAreasToScout(null);
+      setPhase("scouting");
+    }
+  }
+
+  function launchScoutWithAreas() {
+    const cities = citiesToScout ?? [];
+    const areas = Object.fromEntries(
+      Object.entries(selectedAreas)
+        .map(([city, set]) => [city, Array.from(set)] as const)
+        .filter(([city, list]) => list.length > 0 && cities.includes(city))
+    );
+    setAreasToScout(areas);
+    // Persist picks so future re-scouts reuse them (best-effort)
+    fetch(`/api/campaigns/${campaignId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ selectedCities: cities, selectedAreas: areas }),
+    }).catch(() => {});
     setPhase("scouting");
   }
 
@@ -254,7 +297,7 @@ export default function CampaignScoutPage() {
     setRerunning(true);
     setError("");
     try {
-      const l = await runPreview(citiesToScout ?? undefined);
+      const l = await runPreview(citiesToScout ?? undefined, areasToScout ?? undefined);
       setLeads(l);
       setSelected(new Set(l.map((_, i) => i)));
     } catch (err) {
@@ -298,7 +341,9 @@ export default function CampaignScoutPage() {
 
   const subtitle =
     phase === "loading-campaign" || phase === "loading-cities" ? "Loading…"
+    : phase === "loading-areas" ? "Finding hotspot areas…"
     : phase === "pick-cities" ? "This campaign has no cities yet — pick cities to scout."
+    : phase === "pick-areas" ? "Pick hotspot areas per city — cities with no areas selected are searched city-wide."
     : phase === "scouting" ? "Step 1 — collecting leads from Google Maps…"
     : phase === "review" ? "Review and select leads to save. Already-saved leads are excluded."
     : phase === "done" ? `${savedCount} leads collected — ready for Step 2.`
@@ -320,7 +365,7 @@ export default function CampaignScoutPage() {
       </div>
 
       {/* Loading states */}
-      {(phase === "loading-campaign" || phase === "loading-cities" || phase === "scouting" || phase === "enriching") && (
+      {(phase === "loading-campaign" || phase === "loading-cities" || phase === "loading-areas" || phase === "scouting" || phase === "enriching") && (
         <div className="bg-surface border border-border rounded-xl">
           <RunningIndicator />
         </div>
@@ -428,6 +473,109 @@ export default function CampaignScoutPage() {
               onClick={launchScout}
             >
               Scout Leads ({selectedCities.size} {selectedCities.size === 1 ? "city" : "cities"})
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Area picker — shown after picking cities */}
+      {phase === "pick-areas" && (
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-mono text-[12px] text-fg-3 m-0">
+              Hotspot areas for <span className="text-fg-1">{campaign?.businessType}</span>
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  setSelectedAreas(
+                    Object.fromEntries(suggestedAreasByCity.map((c) => [c.city, new Set(c.areas.map((a) => a.area))]))
+                  )
+                }
+              >
+                Select all
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  setSelectedAreas(Object.fromEntries(suggestedAreasByCity.map((c) => [c.city, new Set<string>()])))
+                }
+              >
+                Clear
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-4">
+            {suggestedAreasByCity.map((cityGroup) => {
+              const citySelected = selectedAreas[cityGroup.city] ?? new Set<string>();
+              return (
+                <div key={cityGroup.city} className="flex flex-col gap-2">
+                  <p className="font-mono text-[11px] uppercase tracking-wider text-fg-4 m-0">
+                    {cityGroup.city}
+                    <span className="text-fg-5 ml-2 normal-case tracking-normal">
+                      {citySelected.size}/{cityGroup.areas.length} selected
+                    </span>
+                  </p>
+                  {cityGroup.areas.map((a) => {
+                    const active = citySelected.has(a.area);
+                    return (
+                      <button
+                        key={a.area}
+                        type="button"
+                        onClick={() =>
+                          setSelectedAreas((prev) => {
+                            const next = { ...prev };
+                            const set = new Set(next[cityGroup.city] ?? []);
+                            if (set.has(a.area)) set.delete(a.area);
+                            else set.add(a.area);
+                            next[cityGroup.city] = set;
+                            return next;
+                          })
+                        }
+                        className={[
+                          "text-left rounded-lg border px-4 py-3 transition-colors duration-150 cursor-pointer w-full",
+                          active
+                            ? "bg-amber-bg border-amber-border"
+                            : "bg-[oklch(0.12_0_0)] border-[oklch(0.19_0_0)] hover:border-[oklch(0.26_0_0)]",
+                        ].join(" ")}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={[
+                              "w-4 h-4 rounded-sm border flex items-center justify-center shrink-0 text-[9px]",
+                              active ? "bg-amber border-amber text-canvas" : "border-[oklch(0.28_0_0)]",
+                            ].join(" ")}
+                          >
+                            {active ? "✓" : ""}
+                          </span>
+                          <span className="font-mono text-[13px] text-fg-1 font-medium flex-1">{a.area}</span>
+                          <span className="font-mono text-[11px] text-fg-4 shrink-0">{a.score}/100</span>
+                        </div>
+                        <ScoreBar score={a.score} />
+                        {a.reason && <p className="font-mono text-[11px] text-fg-4 mt-2 ml-7 m-0">{a.reason}</p>}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex justify-between items-center mt-2">
+            <Button type="button" variant="ghost" onClick={() => setPhase("pick-cities")}>
+              ← Back
+            </Button>
+            <Button type="button" size="lg" iconStart="play" onClick={launchScoutWithAreas}>
+              {(() => {
+                const n = Object.values(selectedAreas).reduce((sum, s) => sum + s.size, 0);
+                return n > 0 ? `Scout Leads (${n} ${n === 1 ? "area" : "areas"})` : "Scout Leads (city-wide)";
+              })()}
             </Button>
           </div>
         </div>

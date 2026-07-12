@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { scoutGraph } from "@/agents/scout/graph";
 import { mapsScoutGraph } from "@/agents/scout/maps-graph";
 import { getSystemSettings } from "@/lib/settings";
+import { parseSelectedAreas } from "@/agents/scout/lib/areas";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -30,10 +31,11 @@ export async function POST(req: NextRequest) {
       businessType: campaign.businessType ?? campaign.query,
       country: campaign.country ?? "",
       selectedCities: campaign.selectedCities,
+      selectedAreas: parseSelectedAreas(campaign.selectedAreas),
       campaignId: campaign.id,
       googleMapsApiKey: settings.googleMapsApiKey,
       firecrawlApiKey: settings.firecrawlApiKey ?? "",
-      maxPerCity: 60,
+      maxPerCity: 300,
     });
 
     return NextResponse.json({ ok: true, savedCount: result.savedCount });

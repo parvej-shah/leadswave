@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { parseSelectedAreas, SelectedAreas } from "@/agents/scout/lib/areas";
 
 async function getUserId() {
   const session = await auth();
@@ -26,7 +27,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
 
   const { id } = await ctx.params;
   const body = await req.json();
-  const { name, query, location, offerText, websiteOffer, crmOffer, status, businessType, country, autoSend } = body as {
+  const { name, query, location, offerText, websiteOffer, crmOffer, status, businessType, country, autoSend, selectedCities, selectedAreas } = body as {
     name?: string;
     query?: string;
     location?: string;
@@ -37,6 +38,8 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
     businessType?: string;
     country?: string;
     autoSend?: boolean;
+    selectedCities?: string[];
+    selectedAreas?: Record<string, string[]>;
   };
 
   const existing = await db.campaign.findFirst({
@@ -56,6 +59,8 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
     businessType?: string;
     country?: string;
     autoSend?: boolean;
+    selectedCities?: string[];
+    selectedAreas?: SelectedAreas;
   } = {};
 
   if (typeof name === "string") data.name = name.trim();
@@ -70,6 +75,10 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
     data.status = status;
   }
   if (typeof autoSend === "boolean") data.autoSend = autoSend;
+  if (Array.isArray(selectedCities)) {
+    data.selectedCities = selectedCities.filter((c) => typeof c === "string" && c.trim());
+  }
+  if (selectedAreas !== undefined) data.selectedAreas = parseSelectedAreas(selectedAreas);
 
   if ((data.name !== undefined && !data.name) || (data.query !== undefined && !data.query) || (data.location !== undefined && !data.location)) {
     return NextResponse.json(

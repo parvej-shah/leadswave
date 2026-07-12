@@ -10,8 +10,8 @@ const QUADRANT_OFFSETS = [
   { lat: -0.09, lng: -0.11 }, // SW
 ];
 
-// Geocode a city to lat/lng using the Places API text search (just grab the first result's geometry).
-async function geocodeCity(apiKey: string, city: string, country: string): Promise<{ lat: number; lng: number } | null> {
+// Geocode any place query to lat/lng using the Places API text search (first result's geometry).
+async function geocodePlace(apiKey: string, textQuery: string): Promise<{ lat: number; lng: number } | null> {
   try {
     const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
       method: "POST",
@@ -20,7 +20,7 @@ async function geocodeCity(apiKey: string, city: string, country: string): Promi
         "X-Goog-Api-Key": apiKey,
         "X-Goog-FieldMask": "places.location",
       },
-      body: JSON.stringify({ textQuery: `${city}, ${country}`, pageSize: 1 }),
+      body: JSON.stringify({ textQuery, pageSize: 1 }),
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { places?: Array<{ location?: { latitude?: number; longitude?: number } }> };
@@ -31,6 +31,27 @@ async function geocodeCity(apiKey: string, city: string, country: string): Promi
     return null;
   }
 }
+
+function geocodeCity(apiKey: string, city: string, country: string) {
+  return geocodePlace(apiKey, `${city}, ${country}`);
+}
+
+function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+// A geocoded "area" further than this from the city centre is treated as a hallucinated
+// or wrong-city name and skipped (large metros can legitimately span ~30-40km).
+const MAX_AREA_DISTANCE_KM = 40;
+const AREA_RADIUS_METERS = 4000;
+// Cap query variants per area to bound API-call fan-out (leads are uncapped, calls are not).
+const MAX_VARIANTS_PER_AREA = 3;
 
 // Synonym map: keys are lowercased substrings to match against businessType.
 // Values are the search query variants to run per city — more variants = more leads found.
@@ -118,15 +139,76 @@ function getQueryVariants(businessType: string): string[] {
   return [businessType, `${businessType} company`, `${businessType} services`];
 }
 
+// Search a city's selected hotspot areas: geocode each area, reject hallucinated/out-of-city
+// names, then mine each valid area up to maxPerArea. Returns false when no area geocoded so
+// the caller can fall back to the quadrant grid.
+async function searchCityByAreas(opts: {
+  state: MapsScoutState;
+  city: string;
+  areas: string[];
+  centre: { lat: number; lng: number };
+  variants: string[];
+  byPlaceId: Map<string, PlaceLite>;
+}): Promise<boolean> {
+  const { state, city, areas, centre, variants, byPlaceId } = opts;
+  const areaVariants = variants.slice(0, MAX_VARIANTS_PER_AREA);
+  let anyAreaCovered = false;
+
+  for (const area of areas) {
+    const areaCentre = await geocodePlace(state.googleMapsApiKey, `${area}, ${city}, ${state.country}`);
+    if (!areaCentre) {
+      console.warn(`[maps-scout] area "${area}" (${city}) failed geocoding, skipping`);
+      continue;
+    }
+    if (haversineKm(centre, areaCentre) > MAX_AREA_DISTANCE_KM) {
+      console.warn(`[maps-scout] area "${area}" geocoded outside ${city}, skipping`);
+      continue;
+    }
+    anyAreaCovered = true;
+
+    let areaCount = 0;
+    for (const variant of areaVariants) {
+      if (areaCount >= state.maxPerArea) break;
+      try {
+        const found = await searchAllPlacesNearby({
+          apiKey: state.googleMapsApiKey,
+          textQuery: variant,
+          lat: areaCentre.lat,
+          lng: areaCentre.lng,
+          radiusMeters: AREA_RADIUS_METERS,
+          maxResults: state.maxPerArea - areaCount,
+        });
+        for (const p of found) {
+          if (!byPlaceId.has(p.placeId)) {
+            byPlaceId.set(p.placeId, p);
+            areaCount++;
+          }
+        }
+      } catch (err) {
+        console.warn(`[maps-scout] area search failed for "${variant}" in ${area}, ${city}:`, err instanceof Error ? err.message : err);
+      }
+    }
+  }
+
+  return anyAreaCovered;
+}
+
 export async function mapsSearchNode(state: MapsScoutState): Promise<Partial<MapsScoutState>> {
   const byPlaceId = new Map<string, PlaceLite>();
   const variants = getQueryVariants(state.businessType);
-  // Distribute budget: variants × 4 quadrants each, capped at maxPerCity total per city
+  // Quadrant-fallback budget: variants × 4 quadrants each, capped at maxPerCity total per city
   const perQuery = Math.ceil(state.maxPerCity / (variants.length * QUADRANT_OFFSETS.length));
 
   for (const city of state.selectedCities) {
-    // Geocode city centre so we can search quadrant offsets
+    // Geocode city centre — anchor for area sanity checks and quadrant offsets
     const centre = await geocodeCity(state.googleMapsApiKey, city, state.country);
+
+    const areas = state.selectedAreas?.[city] ?? [];
+    if (areas.length > 0 && centre) {
+      const covered = await searchCityByAreas({ state, city, areas, centre, variants, byPlaceId });
+      if (covered) continue;
+      console.warn(`[maps-scout] no areas geocoded for ${city}, falling back to quadrant search`);
+    }
 
     for (const variant of variants) {
       if (centre) {

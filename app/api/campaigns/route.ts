@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getSystemSettings } from "@/lib/settings";
+import { parseSelectedAreas } from "@/agents/scout/lib/areas";
 
 async function getUserId() {
   const session = await auth();
@@ -34,6 +35,7 @@ export async function POST(req: NextRequest) {
     businessType,
     country,
     selectedCities,
+    selectedAreas,
     websiteOffer,
     crmOffer,
   } = body as {
@@ -44,11 +46,14 @@ export async function POST(req: NextRequest) {
     businessType?: string;
     country?: string;
     selectedCities?: string[];
+    selectedAreas?: Record<string, string[]>;
     websiteOffer?: string;
     crmOffer?: string;
   };
 
   const cities = Array.isArray(selectedCities) ? selectedCities.filter((c) => typeof c === "string" && c.trim()) : [];
+  const parsedAreas = parseSelectedAreas(selectedAreas);
+  const areas = Object.fromEntries(Object.entries(parsedAreas).filter(([city]) => cities.includes(city)));
   const resolvedQuery = (businessType || query || "").trim();
   const resolvedLocation = (location || cities.join(", ") || country || "").trim();
 
@@ -70,6 +75,7 @@ export async function POST(req: NextRequest) {
       businessType: businessType || null,
       country: country || null,
       selectedCities: cities,
+      selectedAreas: Object.keys(areas).length > 0 ? areas : undefined,
       websiteOffer: websiteOffer || null,
       crmOffer: crmOffer || null,
       status: "active",
