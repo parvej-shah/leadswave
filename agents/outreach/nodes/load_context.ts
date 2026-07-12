@@ -5,7 +5,7 @@ import { loadWebsiteSummary } from "../lib/context";
 export async function loadContextNode(state: OutreachState): Promise<Partial<OutreachState>> {
   const lead = await db.lead.findUniqueOrThrow({
     where: { id: state.leadId },
-    include: { campaign: true },
+    include: { campaign: { include: { offers: true } } },
   });
 
   const websiteSummary = await loadWebsiteSummary({

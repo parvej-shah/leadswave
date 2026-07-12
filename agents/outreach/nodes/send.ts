@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { OutreachState } from "../graph";
 import { appendOpenerSignature } from "@/lib/email/signature";
 import { sendsDisabled, dryRunSend } from "@/lib/email/guard";
+import { logActivity } from "@/lib/activity";
 
 export async function sendNode(state: OutreachState): Promise<Partial<OutreachState>> {
   if (!state.lead.email) throw new Error(`Lead ${state.leadId} has no email address`);
@@ -49,6 +50,14 @@ export async function sendNode(state: OutreachState): Promise<Partial<OutreachSt
   await db.lead.update({
     where: { id: state.leadId },
     data: { state: "contacted", lastTouchedAt: new Date() },
+  });
+
+  await logActivity({
+    orgId: state.lead.orgId,
+    type: "opener_sent",
+    leadId: state.leadId,
+    campaignId: state.lead.campaignId,
+    summary: `Sent opener to ${state.lead.companyName}`,
   });
 
   return { sent: true };

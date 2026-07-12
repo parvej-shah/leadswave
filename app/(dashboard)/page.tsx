@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { Badge, Button, Card, CardHeader, EmptyState, Icon, KPI } from "@/components/ui";
 import { RunFollowupsButton } from "./run-followups-button";
 import { DashboardPeriodSwitcher } from "./dashboard-period-switcher";
+import { FollowupQueue } from "./followup-queue";
 
 type Period = "24h" | "7d" | "30d" | "ytd";
 
@@ -144,6 +145,28 @@ export default async function DashboardPage({
       where: { orgId, state: "discovered", deletedAt: null },
     }),
   ]);
+
+  // Trust surfaces: real activity events + deliverability health
+  const dayStart = new Date(new Date().setUTCHours(0, 0, 0, 0));
+  const [events, bouncedCount, complainedCount, suppressedCount, sentToday, orgSettings] =
+    await Promise.all([
+      db.activityEvent.findMany({
+        where: { orgId },
+        orderBy: { createdAt: "desc" },
+        take: 12,
+      }),
+      db.message.count({ where: { deliveryStatus: "bounced", lead: { orgId } } }),
+      db.message.count({ where: { deliveryStatus: "complained", lead: { orgId } } }),
+      db.suppression.count({ where: { orgId } }),
+      db.message.count({ where: { direction: "outbound", sentAt: { gte: dayStart }, lead: { orgId } } }),
+      db.settings.findUnique({ where: { orgId }, select: { dailySendLimit: true, fromEmail: true } }),
+    ]);
+  // Fresh org (no campaigns, no sending config): guide instead of blank charts.
+  if (campaigns.length === 0 && !orgSettings?.fromEmail) redirect("/onboarding");
+
+  const dailyLimit = orgSettings?.dailySendLimit ?? 100;
+  const allOutbound = await db.message.count({ where: { direction: "outbound", lead: { orgId } } });
+  const bounceRate = allOutbound > 0 ? ((bouncedCount / allOutbound) * 100).toFixed(1) : "0.0";
 
   const replyRate =
     totalEmailsSent > 0 ? ((totalReplies / totalEmailsSent) * 100).toFixed(1) : "0.0";
@@ -437,7 +460,9 @@ export default async function DashboardPage({
           >
             Activity
           </CardHeader>
-          {recentActivity.length === 0 ? (
+          {events.length > 0 ? (
+            <EventStream events={events} />
+          ) : recentActivity.length === 0 ? (
             <div className="p-5">
               <EmptyState>No activity yet.</EmptyState>
             </div>
@@ -446,8 +471,103 @@ export default async function DashboardPage({
           )}
         </Card>
       </div>
+
+      {/* Trust row: what sends next + how healthy sending is */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-4">
+        <FollowupQueue />
+        <Card>
+          <CardHeader>Deliverability</CardHeader>
+          <div className="p-5 grid grid-cols-2 gap-4">
+            <DeliverabilityStat
+              label="Sends today"
+              value={`${sentToday} / ${dailyLimit}`}
+              tone={sentToday >= dailyLimit ? "warn" : "ok"}
+            />
+            <DeliverabilityStat
+              label="Bounce rate"
+              value={`${bounceRate}%`}
+              tone={Number(bounceRate) > 5 ? "warn" : "ok"}
+            />
+            <DeliverabilityStat
+              label="Complaints"
+              value={String(complainedCount)}
+              tone={complainedCount > 0 ? "warn" : "ok"}
+            />
+            <DeliverabilityStat label="Suppressed" value={String(suppressedCount)} tone="neutral" />
+          </div>
+          <p className="font-mono text-[10px] text-fg-5 m-0 px-5 pb-4">
+            Suppressed addresses are never contacted again. Daily caps and send throttling
+            protect your sender reputation.
+          </p>
+        </Card>
+      </div>
     </div>
   );
+}
+
+function DeliverabilityStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "ok" | "warn" | "neutral";
+}) {
+  const color = tone === "warn" ? "var(--hot)" : tone === "ok" ? "var(--success)" : "var(--fg-2)";
+  return (
+    <div>
+      <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4 m-0 mb-1">{label}</p>
+      <p className="font-mono text-[18px] m-0" style={{ color }}>{value}</p>
+    </div>
+  );
+}
+
+const EVENT_DOT: Record<string, string> = {
+  reply_hot: "var(--hot)",
+  meeting_booked: "var(--info)",
+  bounced: "var(--hot)",
+  suppressed: "var(--hot)",
+  reply_cold: "var(--fg-5)",
+  scouted: "var(--success)",
+};
+
+function EventStream({
+  events,
+}: {
+  events: { id: string; type: string; summary: string; createdAt: Date }[];
+}) {
+  let lastGroup = "";
+  const rows: React.ReactElement[] = [];
+  for (const ev of events) {
+    const group = activityGroup(ev.createdAt);
+    if (group !== lastGroup) {
+      lastGroup = group;
+      rows.push(
+        <div
+          key={`g-${group}`}
+          className="px-5 pt-2.5 pb-1 font-mono text-[9px] uppercase tracking-[0.10em] text-fg-5"
+        >
+          {group}
+        </div>
+      );
+    }
+    rows.push(
+      <div key={ev.id} className="flex items-start gap-3 px-5 py-2 hover:bg-[oklch(0.115_0_0)] transition-colors duration-150">
+        <span
+          className="w-1.5 h-1.5 rounded-full mt-[7px] shrink-0"
+          style={{ background: EVENT_DOT[ev.type] ?? "var(--fg-4)" }}
+        />
+        <div className="flex-1 min-w-0">
+          <p className="font-sans text-[13px] text-fg-3 m-0 leading-[1.4]">{ev.summary}</p>
+          <p className="font-mono text-[10px] text-fg-5 m-0 mt-0.5 tracking-[0.04em]">
+            {relativeTime(ev.createdAt)}
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return <div className="py-1">{rows}</div>;
 }
 
 // ─── NeedsAttention ───────────────────────────────────────────────────────────

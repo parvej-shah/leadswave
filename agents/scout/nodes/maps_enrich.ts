@@ -10,8 +10,9 @@ export async function mapsEnrichNode(state: MapsScoutState): Promise<Partial<Map
   const firecrawl = new FirecrawlApp({ apiKey: state.firecrawlApiKey });
   const byPlaceId = new Map<string, MapsLead>(state.leads.map((l) => [l.placeId, l]));
 
-  // Has-website (crm) leads: scrape their site for email + description.
-  const withSite = state.leads.filter((l) => l.category === "crm" && l.website);
+  // Has-website leads: scrape their site for email + description.
+  // (Enrichment strategy keys off the website itself, not the offer name.)
+  const withSite = state.leads.filter((l) => !!l.website);
   for (let i = 0; i < withSite.length; i += BATCH) {
     const batch = withSite.slice(i, i + BATCH);
     const results = await Promise.allSettled(
@@ -32,7 +33,7 @@ export async function mapsEnrichNode(state: MapsScoutState): Promise<Partial<Map
     });
   }
 
-  // CRM leads that still have no email after crawl: fall back to web search.
+  // Has-website leads still missing an email after crawl: fall back to web search.
   const crmNoEmail = withSite.filter((l) => !byPlaceId.get(l.placeId)?.email);
   for (let i = 0; i < crmNoEmail.length; i += BATCH) {
     const batch = crmNoEmail.slice(i, i + BATCH);
@@ -53,8 +54,8 @@ export async function mapsEnrichNode(state: MapsScoutState): Promise<Partial<Map
     });
   }
 
-  // No-website (website_proposal) leads: web-search for an email so we can email them.
-  const noSite = state.leads.filter((l) => l.category === "website_proposal");
+  // No-website leads: web-search for an email so we can email them.
+  const noSite = state.leads.filter((l) => !l.website);
   for (let i = 0; i < noSite.length; i += BATCH) {
     const batch = noSite.slice(i, i + BATCH);
     const results = await Promise.allSettled(

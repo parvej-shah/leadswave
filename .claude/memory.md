@@ -11,6 +11,26 @@ Format: one bullet per item, newest on top. Convert relative dates to absolute.
 
 ## Live decisions
 
+- **Stage B (UX) shipped on top of tenancy.** (2026-07-13)
+  - **User-defined offers**: `CampaignOffer` {key,label,matchSignal,offerText,angle,order};
+    `Lead.category` = offer KEY (legacy "crm"/"website_proposal" preserved as seeded keys).
+    `resolveOffer` matches key → "always" offer → legacy columns → offerText;
+    `matchOfferKey` assigns keys at scout time; **enrichment branches on
+    `lead.website` directly**, never on category name. UI: `components/offers-editor.tsx`
+    in wizard + edit page; leads-page filter + CategoryBadge are dynamic.
+  - **Trust pack**: `ActivityEvent` (org-scoped feed; emitters in scout save, opener send,
+    schedule_followups, cron follow-ups, inbox hot/warm/cold/bounce, booking);
+    dashboard shows real event stream + Deliverability card + `FollowupQueue`
+    (preview/skip/edit pending Jobs; `Job.overrideBody` sent verbatim by cron).
+  - **SSE scout preview**: `/api/agents/scout/preview/stream` (LangGraph streamMode
+    "updates" → SSE frames; wizard consumes via fetch-reader, falls back to the
+    non-streaming endpoint). Resolves the parked SSE-vs-polling decision: SSE.
+  - **Presets**: `Campaign.scoutDepth` (light/normal/deep → `lib/scout-depth.ts` budgets;
+    safety constants stay code-only) + `Campaign.followupOffsets` (editable cadence,
+    sanitized in schedule_followups: min 2-day gaps, max 3 steps, default [3]).
+  - **Onboarding**: `/onboarding` checklist (6 steps); dashboard redirects fresh orgs
+    (0 campaigns + no fromEmail). Test mode: POST `/api/campaigns/[id]/test-send`
+    drafts the real opener and emails it to the signed-in user with [TEST] prefix.
 - **Multi-tenancy shipped (Stage A of SaaS plan).** New models: User/Organization/Membership/
   Invite; `orgId` (NOT NULL) on Campaign/Lead/Settings/Suppression; Suppression unique is now
   `[orgId, email]` (global email unique dropped). All data backfilled to org "XpeedLab" owned by

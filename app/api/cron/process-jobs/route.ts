@@ -9,6 +9,7 @@ import { stripSignature } from "@/lib/html/plain";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { sendsDisabled, dryRunSend } from "@/lib/email/guard";
 import { getSystemSettings } from "@/lib/settings";
+import { logActivity } from "@/lib/activity";
 
 // Opener-spirited fallbacks when AI is unavailable. Distinct per step so a
 // lead's sequence isn't three identical strings. No pitch / no CTA.
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
     include: {
       lead: {
         include: {
-          campaign: true,
+          campaign: { include: { offers: true } },
           messages: {
             orderBy: { sentAt: "asc" },
             select: { subject: true, body: true, direction: true, sentAt: true },
@@ -148,6 +149,12 @@ export async function POST(req: NextRequest) {
       });
       if (suppressed) {
         await db.job.update({ where: { id: job.id }, data: { status: "cancelled" } });
+        await logActivity({
+          orgId,
+          type: "suppressed",
+          leadId: lead.id,
+          summary: `Follow-up to ${lead.companyName} cancelled — address is suppressed`,
+        });
         continue;
       }
 
@@ -190,10 +197,15 @@ export async function POST(req: NextRequest) {
       });
 
       let body: string;
-      try {
-        body = (await generateText(prompt)).trim();
-      } catch {
-        body = FOLLOWUP_FALLBACK[followupNum] ?? FOLLOWUP_FALLBACK[2];
+      if (job.overrideBody?.trim()) {
+        // User previewed and edited this follow-up — send their words verbatim.
+        body = job.overrideBody.trim();
+      } else {
+        try {
+          body = (await generateText(prompt)).trim();
+        } catch {
+          body = FOLLOWUP_FALLBACK[followupNum] ?? FOLLOWUP_FALLBACK[2];
+        }
       }
 
       // Append the operator's signature (its name line replaces the old
@@ -230,6 +242,14 @@ export async function POST(req: NextRequest) {
           }),
           db.job.update({ where: { id: job.id }, data: { status: "done" } }),
         ]);
+
+        await logActivity({
+          orgId,
+          type: "followup_sent",
+          leadId: lead.id,
+          campaignId: lead.campaignId,
+          summary: `Sent follow-up #${followupNum} to ${lead.companyName}`,
+        });
 
         lastSentAt = Date.now();
         orgSentToday++;

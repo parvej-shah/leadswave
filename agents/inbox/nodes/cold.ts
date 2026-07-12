@@ -1,7 +1,15 @@
 import { db } from "@/lib/db";
+import { logActivity } from "@/lib/activity";
 import { InboxState } from "../graph";
 
 export async function coldNode(state: InboxState): Promise<Partial<InboxState>> {
+  await logActivity({
+    orgId: state.lead.orgId,
+    type: "reply_cold",
+    leadId: state.leadId,
+    summary: `${state.lead.companyName} unsubscribed — suppressed`,
+  });
+
   await db.lead.update({
     where: { id: state.leadId },
     data: { state: "unsubscribed", lastTouchedAt: new Date() },

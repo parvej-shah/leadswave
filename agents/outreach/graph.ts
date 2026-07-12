@@ -6,6 +6,8 @@ import { scheduleFollowupsNode } from "./nodes/schedule_followups";
 
 type Lead = {
   id: string;
+  orgId: string;
+  campaignId: string;
   companyName: string;
   email: string | null;
   emailStatus?: string | null;
@@ -23,6 +25,14 @@ type Campaign = {
   websiteOffer: string | null;
   crmOffer: string | null;
   country: string | null;
+  offers?: {
+    key: string;
+    label: string;
+    matchSignal: string;
+    offerText: string;
+    angle: string | null;
+    order: number;
+  }[];
 };
 
 type EmailDraft = {

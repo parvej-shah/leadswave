@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { db } from "@/lib/db";
 import { parseSelectedAreas, SelectedAreas } from "@/agents/scout/lib/areas";
+import { normalizeOffers, type OfferInput } from "@/lib/offers";
 
 export async function GET(_req: NextRequest, ctx: RouteContext<"/api/campaigns/[id]">) {
   let org;
@@ -14,6 +15,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext<"/api/campaigns/[
   const { id } = await ctx.params;
   const campaign = await db.campaign.findFirst({
     where: { id, orgId: org.orgId, deletedAt: null },
+    include: { offers: { orderBy: { order: "asc" } } },
   });
 
   if (!campaign) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
@@ -30,7 +32,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
 
   const { id } = await ctx.params;
   const body = await req.json();
-  const { name, query, location, offerText, websiteOffer, crmOffer, status, businessType, country, autoSend, selectedCities, selectedAreas } = body as {
+  const { name, query, location, offerText, websiteOffer, crmOffer, status, businessType, country, autoSend, selectedCities, selectedAreas, offers, scoutDepth, followupOffsets } = body as {
     name?: string;
     query?: string;
     location?: string;
@@ -43,6 +45,9 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
     autoSend?: boolean;
     selectedCities?: string[];
     selectedAreas?: Record<string, string[]>;
+    offers?: OfferInput[];
+    scoutDepth?: string;
+    followupOffsets?: number[];
   };
 
   const existing = await db.campaign.findFirst({
@@ -64,6 +69,8 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
     autoSend?: boolean;
     selectedCities?: string[];
     selectedAreas?: SelectedAreas;
+    scoutDepth?: string;
+    followupOffsets?: number[];
   } = {};
 
   if (typeof name === "string") data.name = name.trim();
@@ -78,6 +85,16 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
     data.status = status;
   }
   if (typeof autoSend === "boolean") data.autoSend = autoSend;
+  if (typeof scoutDepth === "string" && ["light", "normal", "deep"].includes(scoutDepth)) {
+    data.scoutDepth = scoutDepth;
+  }
+  if (Array.isArray(followupOffsets)) {
+    // Sanitized again at schedule time; basic bounds here (1-30 days, max 3 steps)
+    data.followupOffsets = followupOffsets
+      .filter((n) => Number.isFinite(n) && n >= 2 && n <= 30)
+      .map((n) => Math.round(n))
+      .slice(0, 3);
+  }
   if (Array.isArray(selectedCities)) {
     data.selectedCities = selectedCities.filter((c) => typeof c === "string" && c.trim());
   }
@@ -90,9 +107,22 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
     );
   }
 
+  // Offers: full replacement when the client sends the array. Lead.category
+  // keeps pointing at offer keys; unchanged keys keep routing.
+  if (Array.isArray(offers)) {
+    const normalized = normalizeOffers(offers, {});
+    await db.$transaction([
+      db.campaignOffer.deleteMany({ where: { campaignId: id } }),
+      ...(normalized.length
+        ? [db.campaignOffer.createMany({ data: normalized.map((o) => ({ ...o, campaignId: id })) })]
+        : []),
+    ]);
+  }
+
   const campaign = await db.campaign.update({
     where: { id },
     data,
+    include: { offers: { orderBy: { order: "asc" } } },
   });
 
   return NextResponse.json(campaign);

@@ -86,8 +86,12 @@ export function CategoryBadge({
   category: LeadCategory | string | null;
   size?: BadgeProps["size"];
 }) {
-  const entry = CATEGORY_MAP[category as LeadCategory];
-  if (!entry) return null;
+  if (!category) return null;
+  // Legacy keys keep their colors; user-defined offer keys get a neutral badge
+  // with a prettified label.
+  const entry =
+    CATEGORY_MAP[category as LeadCategory] ??
+    ({ variant: "neutral", label: category.replace(/_/g, " ").toUpperCase() } as const);
   return (
     <Badge variant={entry.variant} size={size}>
       {entry.label}

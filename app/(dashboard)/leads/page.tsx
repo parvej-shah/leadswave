@@ -43,7 +43,7 @@ type Lead = {
   _count: { messages: number };
 };
 
-type CategoryFilter = "all" | "crm" | "website_proposal";
+type CategoryFilter = string; // "all" or any offer key present in the loaded leads
 
 // Alternative outreach channels for leads with no email (Layer 4),
 // plus a review queue for medium-confidence catch-all emails.
@@ -65,10 +65,16 @@ function matchesChannel(l: Lead, c: Exclude<ChannelFilter, "all">): boolean {
 }
 
 
-const CATEGORY_LABEL: Record<"crm" | "website_proposal", string> = {
+// Pretty names for the legacy keys; user-defined offer keys are prettified
+// from their slug (offer labels aren't loaded on this page).
+const CATEGORY_LABEL: Record<string, string> = {
   crm: "CRM",
   website_proposal: "Website",
 };
+
+function categoryLabel(key: string): string {
+  return CATEGORY_LABEL[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 const STATE_KEYS: LeadState[] = [
   "discovered",
@@ -214,9 +220,13 @@ export default function LeadsPage() {
   }, [leads, campaignFilter, stateFilter, categoryFilter, channelFilter, searchQuery, sort]);
 
   const stateCount = (s: LeadState) => leads.filter((l) => l.state === s).length;
-  const categoryCount = (c: "crm" | "website_proposal") =>
-    leads.filter((l) => l.category === c).length;
-  const hasCategories = useMemo(() => leads.some((l) => l.category), [leads]);
+  const categoryCount = (c: string) => leads.filter((l) => l.category === c).length;
+  const categoryKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const l of leads) if (l.category) keys.add(l.category);
+    return Array.from(keys).sort();
+  }, [leads]);
+  const hasCategories = categoryKeys.length > 0;
   const channelCount = (c: Exclude<ChannelFilter, "all">) =>
     leads.filter((l) => matchesChannel(l, c)).length;
   const hasChannelLeads = useMemo(
@@ -428,14 +438,14 @@ export default function LeadsPage() {
           >
             All types
           </FilterChip>
-          {(["crm", "website_proposal"] as const).map((c) => (
+          {categoryKeys.map((c) => (
             <FilterChip
               key={c}
               active={categoryFilter === c}
               onClick={() => setCategoryFilter(c)}
               count={categoryCount(c)}
             >
-              {CATEGORY_LABEL[c]}
+              {categoryLabel(c)}
             </FilterChip>
           ))}
         </div>

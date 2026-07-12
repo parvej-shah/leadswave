@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button, Input, Textarea, Toast, CategoryBadge, Icon } from "@/components/ui";
+import { Button, Input, Select, Textarea, Toast, CategoryBadge, Icon } from "@/components/ui";
+import { OffersEditor, DEFAULT_OFFERS, type OfferDraft } from "@/components/offers-editor";
 import { MapsLead } from "@/agents/scout/maps-graph";
 
 type SuggestedCity = { city: string; reason: string; score: number };
@@ -284,8 +285,8 @@ export function NewCampaignWizard() {
   const [name, setName] = useState("");
   const [businessType, setBusinessType] = useState("");
   const [country, setCountry] = useState("");
-  const [websiteOffer, setWebsiteOffer] = useState("");
-  const [crmOffer, setCrmOffer] = useState("");
+  const [offers, setOffers] = useState<OfferDraft[]>(DEFAULT_OFFERS);
+  const [scoutDepth, setScoutDepth] = useState("normal");
 
   const [cities, setCities] = useState<SuggestedCity[]>([]);
   const [selectedCities, setSelectedCities] = useState<Set<string>>(new Set());
@@ -301,7 +302,8 @@ export function NewCampaignWizard() {
   const [error, setError] = useState("");
   const [loadingCities, setLoadingCities] = useState(false);
   const [rerunning, setRerunning] = useState(false);
-  const [generatingOffer, setGeneratingOffer] = useState<"website" | "crm" | null>(null);
+  const [liveNote, setLiveNote] = useState("");
+  const [generatingOffer, setGeneratingOffer] = useState<number | null>(null);
 
   const allLeadsSelected = leads.length > 0 && selectedLeads.size === leads.length;
 
@@ -347,25 +349,26 @@ export function NewCampaignWizard() {
     else setSelectedLeads(new Set(leads.map((_, i) => i)));
   }
 
-  async function generateOffer(type: "website" | "crm") {
-    if (!businessType.trim() && !name.trim()) return;
-    setGeneratingOffer(type);
+  async function generateOffer(index: number) {
+    const offer = offers[index];
+    if (!offer || (!businessType.trim() && !name.trim())) return;
+    setGeneratingOffer(index);
     try {
       const res = await fetch("/api/campaigns/description-draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          keywords: [name, businessType, country].filter(Boolean).join(", "),
+          keywords: [name, businessType, country, offer.label].filter(Boolean).join(", "),
           campaignName: name,
           query: businessType,
           location: country,
-          offerType: type,
+          offerLabel: offer.label,
+          matchSignal: offer.matchSignal,
         }),
       });
       const data = await res.json();
       if (res.ok && data.draft) {
-        if (type === "website") setWebsiteOffer(data.draft);
-        else setCrmOffer(data.draft);
+        setOffers((prev) => prev.map((o, i) => (i === index ? { ...o, offerText: data.draft } : o)));
       }
     } finally {
       setGeneratingOffer(null);
@@ -432,14 +435,62 @@ export function NewCampaignWizard() {
   }
 
   const runPreview = useCallback(async (id: string) => {
-    const res = await fetch("/api/agents/scout/preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ campaignId: id }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error ?? "Lead scouting failed");
-    return (data.leads ?? []) as MapsLead[];
+    // Streaming path: real node-by-node progress + leads the moment the
+    // pipeline finishes deduping (SSE over fetch — EventSource can't POST).
+    try {
+      const res = await fetch("/api/agents/scout/preview/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campaignId: id }),
+      });
+      if (!res.ok || !res.body) throw new Error("stream unavailable");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let streamed: MapsLead[] | null = null;
+      let streamError = "";
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() ?? "";
+        for (const frame of frames) {
+          const line = frame.split("\n").find((l) => l.startsWith("data: "));
+          if (!line) continue;
+          try {
+            const evt = JSON.parse(line.slice(6));
+            if (evt.type === "progress") {
+              setLiveNote(evt.count != null ? `${evt.label} (${evt.count})` : evt.label);
+            } else if (evt.type === "leads") {
+              streamed = evt.leads as MapsLead[];
+              setLiveNote(`Found ${streamed.length} leads — finishing up…`);
+            } else if (evt.type === "error") {
+              streamError = evt.error;
+            }
+          } catch {
+            // malformed frame — ignore
+          }
+        }
+      }
+      if (streamError) throw new Error(streamError);
+      if (streamed) return streamed;
+      throw new Error("stream ended without leads");
+    } catch (err) {
+      // Graceful fallback to the non-streaming endpoint
+      console.warn("[wizard] stream preview failed, falling back:", err);
+      setLiveNote("");
+      const res = await fetch("/api/agents/scout/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campaignId: id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Lead scouting failed");
+      return (data.leads ?? []) as MapsLead[];
+    }
   }, []);
 
   async function launch() {
@@ -461,7 +512,7 @@ export function NewCampaignWizard() {
       const createRes = await fetch("/api/campaigns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, businessType, country, selectedCities: cities, selectedAreas: areasPayload, websiteOffer, crmOffer }),
+        body: JSON.stringify({ name, businessType, country, scoutDepth, selectedCities: cities, selectedAreas: areasPayload, offers: offers.filter((o) => o.label.trim() && o.offerText.trim()) }),
       });
       if (!createRes.ok) {
         const data = await createRes.json();
@@ -584,56 +635,28 @@ export function NewCampaignWizard() {
               value={country}
               onChange={(e) => setCountry(e.target.value)}
             />
+            <Select
+              label="Scouting depth"
+              value={scoutDepth}
+              onChange={(e) => setScoutDepth(e.target.value)}
+            >
+              <option value="light">Light — quick sample, lowest API cost</option>
+              <option value="normal">Normal — balanced (recommended)</option>
+              <option value="deep">Deep — maximum coverage</option>
+            </Select>
           </div>
           <div className="border-t border-border pt-3 flex flex-col gap-2.5">
             <div className="flex items-center justify-between">
-              <p className="font-mono text-[11px] text-fg-5 m-0 uppercase tracking-wider">Offer Templates (optional)</p>
+              <p className="font-mono text-[11px] text-fg-5 m-0 uppercase tracking-wider">Offers (optional)</p>
               <p className="font-mono text-[10px] text-fg-5 m-0">AI will draft based on your campaign details</p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-fg-4">Website-proposal offer</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    iconStart="sparkle"
-                    disabled={generatingOffer === "website" || (!name.trim() && !businessType.trim())}
-                    onClick={() => generateOffer("website")}
-                  >
-                    {generatingOffer === "website" ? "Generating…" : "AI Generate"}
-                  </Button>
-                </div>
-                <Textarea
-                  rows={4}
-                  placeholder="Pitch for leads with no website — sell a website build."
-                  value={websiteOffer}
-                  onChange={(e) => setWebsiteOffer(e.target.value)}
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-fg-4">CRM offer</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    iconStart="sparkle"
-                    disabled={generatingOffer === "crm" || (!name.trim() && !businessType.trim())}
-                    onClick={() => generateOffer("crm")}
-                  >
-                    {generatingOffer === "crm" ? "Generating…" : "AI Generate"}
-                  </Button>
-                </div>
-                <Textarea
-                  rows={4}
-                  placeholder="Pitch for leads that already have a website — sell CRM."
-                  value={crmOffer}
-                  onChange={(e) => setCrmOffer(e.target.value)}
-                />
-              </div>
-            </div>
+            <OffersEditor
+              offers={offers}
+              onChange={setOffers}
+              onGenerate={generateOffer}
+              generatingIndex={generatingOffer}
+              generateDisabled={!name.trim() && !businessType.trim()}
+            />
           </div>
 
           {error && <Toast kind="hot" pill="ERROR">{error}</Toast>}
@@ -852,6 +875,11 @@ export function NewCampaignWizard() {
       {phase === "running" && (
         <div className="bg-surface border border-border rounded-xl">
           <RunningIndicator />
+          {liveNote && (
+            <p className="font-mono text-[11px] text-fg-4 text-center m-0 pb-5 -mt-3">
+              {liveNote}
+            </p>
+          )}
         </div>
       )}
 

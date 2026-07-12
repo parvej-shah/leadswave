@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
 
   const lead = await db.lead.findFirst({
     where: { id: leadId, orgId: ctx.orgId },
-    include: { campaign: true },
+    include: { campaign: { include: { offers: true } } },
   });
   if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
 

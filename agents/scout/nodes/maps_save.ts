@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { logActivity } from "@/lib/activity";
 import { MapsScoutState } from "../maps-graph";
 
 export async function mapsSaveNode(state: MapsScoutState): Promise<Partial<MapsScoutState>> {
@@ -26,6 +27,13 @@ export async function mapsSaveNode(state: MapsScoutState): Promise<Partial<MapsS
       state: "discovered",
     })),
     skipDuplicates: true,
+  });
+
+  await logActivity({
+    orgId: state.orgId,
+    type: "scouted",
+    campaignId: state.campaignId,
+    summary: `Scouted ${result.count} new lead${result.count === 1 ? "" : "s"}`,
   });
 
   return { savedCount: result.count };

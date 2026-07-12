@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getSystemSettings } from "@/lib/settings";
 import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { parseSelectedAreas } from "@/agents/scout/lib/areas";
+import { normalizeOffers, type OfferInput } from "@/lib/offers";
 
 export async function GET() {
   let ctx;
@@ -41,6 +42,8 @@ export async function POST(req: NextRequest) {
     selectedAreas,
     websiteOffer,
     crmOffer,
+    offers,
+    scoutDepth,
   } = body as {
     name?: string;
     query?: string;
@@ -52,6 +55,8 @@ export async function POST(req: NextRequest) {
     selectedAreas?: Record<string, string[]>;
     websiteOffer?: string;
     crmOffer?: string;
+    offers?: OfferInput[];
+    scoutDepth?: string;
   };
 
   const cities = Array.isArray(selectedCities) ? selectedCities.filter((c) => typeof c === "string" && c.trim()) : [];
@@ -68,6 +73,7 @@ export async function POST(req: NextRequest) {
   }
 
   const settings = await getSystemSettings(ctx.orgId);
+  const normalizedOffers = normalizeOffers(offers, { websiteOffer, crmOffer });
 
   const campaign = await db.campaign.create({
     data: {
@@ -83,7 +89,10 @@ export async function POST(req: NextRequest) {
       websiteOffer: websiteOffer || null,
       crmOffer: crmOffer || null,
       status: "active",
+      ...(["light", "normal", "deep"].includes(scoutDepth ?? "") ? { scoutDepth } : {}),
+      ...(normalizedOffers.length > 0 ? { offers: { create: normalizedOffers } } : {}),
     },
+    include: { offers: true },
   });
 
   return NextResponse.json(campaign, { status: 201 });

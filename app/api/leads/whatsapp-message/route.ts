@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
   if (!leadId) return NextResponse.json({ error: "leadId required" }, { status: 400 });
 
   const [lead, settings] = await Promise.all([
-    db.lead.findFirst({ where: { id: leadId, orgId: ctx.orgId }, include: { campaign: true } }),
+    db.lead.findFirst({ where: { id: leadId, orgId: ctx.orgId }, include: { campaign: { include: { offers: true } } } }),
     getSystemSettings(ctx.orgId),
   ]);
   if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });

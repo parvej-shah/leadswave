@@ -1,5 +1,6 @@
 import { searchAllPlaces, searchAllPlacesNearby, PlaceLite } from "@/lib/places/client";
 import { MapsScoutState, MapsLead } from "../maps-graph";
+import { matchOfferKey } from "@/agents/outreach/lib/offer";
 
 // Approximate degree offset for a ~10km quadrant radius from city centre.
 // 0.09° ≈ 10km in latitude; longitude varies by latitude but 0.11° is close enough globally.
@@ -256,7 +257,7 @@ export async function mapsSearchNode(state: MapsScoutState): Promise<Partial<Map
     website: p.website,
     email: null,
     description: null,
-    category: p.website ? "crm" : "website_proposal",
+    category: matchOfferKey({ hasWebsite: !!p.website }, state.offers),
     address: p.address,
     phone: p.phone,
     rating: p.rating,

@@ -4,6 +4,7 @@ import { createEvent } from "@/lib/calendar/client";
 import { getSystemSettings } from "@/lib/settings";
 import { getOrgOwnerGoogleToken } from "@/lib/tenant";
 import { sendsDisabled, dryRunSend } from "@/lib/email/guard";
+import { logActivity } from "@/lib/activity";
 
 type TelegramUpdate = {
   message?: {
@@ -147,6 +148,13 @@ async function handleConfirm(pendingId: string, slotIndex: number, chatId: numbe
     db.lead.update({ where: { id: pending.leadId }, data: { state: "meeting_booked", lastTouchedAt: new Date() } }),
     db.pendingConfirmation.update({ where: { id: pendingId }, data: { status: "confirmed" } }),
   ]);
+
+  await logActivity({
+    orgId,
+    type: "meeting_booked",
+    leadId: pending.leadId,
+    summary: `Meeting booked with ${ctx.companyName} (${slotLabel})`,
+  });
 
   // Send confirmation email to lead
   if (settings.resendApiKey && settings.fromEmail && ctx.email) {

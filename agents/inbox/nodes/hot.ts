@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { logActivity } from "@/lib/activity";
 import { sendTelegramMessage, notifyAiFailure, escapeHtml } from "@/lib/telegram";
 import { generateText } from "@/lib/gemini";
 import { getAvailableSlots, createEvent, Slot } from "@/lib/calendar/client";
@@ -134,6 +135,13 @@ async function bookMeeting(
 
   await db.lead.update({ where: { id: state.leadId }, data: { state: "meeting_booked", lastTouchedAt: new Date() } });
 
+  await logActivity({
+    orgId: state.lead.orgId,
+    type: "meeting_booked",
+    leadId: state.leadId,
+    summary: `Meeting auto-booked with ${state.lead.companyName} (${formatSlot(slot)})`,
+  });
+
   const confirmBody = [
     `Great — I've booked our meeting for ${formatSlot(slot)}.`,
     event.meetLink ? `\nGoogle Meet: ${event.meetLink}` : "",
@@ -252,6 +260,13 @@ async function askHumanViaTelegram(
 }
 
 export async function hotNode(state: InboxState): Promise<Partial<InboxState>> {
+  await logActivity({
+    orgId: state.lead.orgId,
+    type: "reply_hot",
+    leadId: state.leadId,
+    summary: `Classified reply from ${state.lead.companyName} as HOT`,
+  });
+
   await db.lead.update({
     where: { id: state.leadId },
     data: { state: "replied", lastTouchedAt: new Date() },

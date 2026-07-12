@@ -1,12 +1,15 @@
 import { StateGraph, Annotation } from "@langchain/langgraph";
 import { PlaceLite } from "@/lib/places/client";
+import { CampaignOfferLike } from "@/agents/outreach/lib/offer";
 import { mapsSearchNode } from "./nodes/maps_search";
 import { mapsFilterNode } from "./nodes/maps_filter";
 import { mapsScoreNode } from "./nodes/maps_score";
 import { mapsDedupeNode } from "./nodes/maps_dedupe";
 import { mapsSaveNode } from "./nodes/maps_save";
 
-export type LeadCategory = "website_proposal" | "crm";
+// Offer key from the campaign's CampaignOffer rows ("website_proposal"/"crm"
+// remain the legacy fallbacks when a campaign has no offers).
+export type LeadCategory = string;
 
 export type MapsLead = {
   companyName: string;
@@ -37,6 +40,11 @@ const MapsScoutAnnotation = Annotation.Root({
   }),
   campaignId: Annotation<string>(),
   orgId: Annotation<string>(),
+  // Campaign's user-defined offers; drives per-lead category assignment
+  offers: Annotation<CampaignOfferLike[], CampaignOfferLike[]>({
+    value: (_prev, next) => next,
+    default: () => [],
+  }),
   googleMapsApiKey: Annotation<string>(),
   firecrawlApiKey: Annotation<string>(),
   // Quadrant-fallback budget for cities without selected areas

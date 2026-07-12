@@ -70,6 +70,8 @@ model Campaign {
   crmOffer       String?
   status         String    @default("active") // active | paused | completed
   autoSend       Boolean   @default(false)
+  scoutDepth     String    @default("normal") // light | normal | deep — maps to Places budgets
+  followupOffsets Int[]    @default([3]) // days after opener for each follow-up (max 3 steps)
   leads          Lead[]
   offers         CampaignOffer[]
   createdAt      DateTime  @default(now())
@@ -142,13 +144,27 @@ model Message {
 }
 
 model Job {
-  id          String   @id @default(cuid())
-  leadId      String
-  type        String   // followup_2 | followup_3 | followup_4
-  scheduledAt DateTime
-  status      String   @default("pending") // pending | done | cancelled | failed
-  bullmqId    String? // reserved for future BullMQ integration
-  lead        Lead     @relation(fields: [leadId], references: [id])
+  id           String   @id @default(cuid())
+  leadId       String
+  type         String   // followup_2 | followup_3 | followup_4
+  scheduledAt  DateTime
+  status       String   @default("pending") // pending | done | cancelled | failed
+  overrideBody String? // user-edited body; when set, cron sends this instead of AI-drafting
+  bullmqId     String? // reserved for future BullMQ integration
+  lead         Lead     @relation(fields: [leadId], references: [id])
+}
+
+model ActivityEvent {
+  id         String   @id @default(cuid())
+  orgId      String
+  type       String   // scouted | opener_sent | followup_sent | followup_queued | reply_hot | reply_warm | reply_cold | bounced | suppressed | meeting_booked
+  summary    String   // human-readable one-liner shown in the feed
+  leadId     String?
+  campaignId String?
+  meta       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([orgId, createdAt(sort: Desc)])
 }
 
 model Settings {

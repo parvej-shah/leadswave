@@ -29,7 +29,10 @@ listed here so it isn't forgotten, but not currently blocking.
       so it's a separate design pass — needs upload UI, column-mapping, and
       preview states defined before code changes.
 
-- [ ] **Right-pane "scouted leads preview" on New Campaign**
+- [x] **Right-pane "scouted leads preview" on New Campaign**
+      Shipped (2026-07-13): SSE streaming via `/api/agents/scout/preview/stream` —
+      wizard shows real node-by-node progress + leads on arrival, with fallback
+      to the non-streaming endpoint. Original notes below.
       The DS reference shows a live right-pane preview of scouted leads as they
       stream in. Currently scout runs async via `/api/agents/scout` and we show
       the resulting count on the done card — which matches the real backend
@@ -81,7 +84,9 @@ listed here so it isn't forgotten, but not currently blocking.
       Card shows avatar, name, email, scopes line, plus Reconnect and Disconnect
       buttons. Disconnect optimistically updates the UI without a page reload.
 
-- [ ] **Team tab**
+- [x] **Team tab**
+      Shipped (2026-07-13) with full multi-tenancy (Organization/Membership/Invite),
+      role management, and invite links at /invite/[token]. Original notes below.
       DS reference lists teammates with roles + invite flow. There is no
       multi-user / org model in the schema yet — this is a meaningful
       product expansion, not a UI pass. Park until multi-user is on the

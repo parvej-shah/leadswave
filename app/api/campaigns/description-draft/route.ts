@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { generateText } from "@/lib/gemini";
 
-async function getUserId() {
-  const session = await auth();
-  return session?.user?.id ?? null;
-}
+const SIGNAL_CONTEXT: Record<string, string> = {
+  no_website: "The target business has NO website yet.",
+  has_website: "The target business already HAS a website.",
+  always: "",
+};
 
 export async function POST(req: NextRequest) {
-  const userId = await getUserId();
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    await requireOrg();
+  } catch (e) {
+    return tenantErrorResponse(e);
+  }
 
   const body = await req.json();
   const {
@@ -18,24 +22,32 @@ export async function POST(req: NextRequest) {
     query = "",
     location = "",
     offerType,
+    offerLabel = "",
+    matchSignal = "",
   } = (body ?? {}) as {
     keywords?: string;
     campaignName?: string;
     query?: string;
     location?: string;
+    /** Legacy two-track hint (older clients). */
     offerType?: "website" | "crm";
+    /** User-defined offer: its display label (e.g. "Online booking setup"). */
+    offerLabel?: string;
+    /** has_website | no_website | always */
+    matchSignal?: string;
   };
 
   if (!keywords || !keywords.trim()) {
     return NextResponse.json({ error: "keywords are required" }, { status: 400 });
   }
 
-  const offerContext =
-    offerType === "website"
-      ? "This is a WEBSITE-PROPOSAL offer — the target business has NO website yet. The pitch should offer to build them a professional website."
-      : offerType === "crm"
-      ? "This is a CRM offer — the target business already HAS a website. The pitch should offer a CRM/lead-management system to grow their business."
-      : "";
+  // User-defined offers take precedence; legacy offerType maps onto the same shape.
+  const label = offerLabel.trim() || (offerType === "website" ? "Website" : offerType === "crm" ? "CRM" : "");
+  const signal = matchSignal || (offerType === "website" ? "no_website" : offerType === "crm" ? "has_website" : "");
+  const signalContext = SIGNAL_CONTEXT[signal] ?? "";
+  const offerContext = label
+    ? `This pitch is for the "${label}" offer. ${signalContext} The pitch should offer exactly that service.`
+    : "";
 
   const prompt = `You write concise cold-outreach offer pitches.
 Return only the pitch text (no markdown, no labels, no surrounding quotes).

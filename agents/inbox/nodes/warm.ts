@@ -1,10 +1,18 @@
 import { generateText } from "@/lib/gemini";
 import { db } from "@/lib/db";
+import { logActivity } from "@/lib/activity";
 import { sendTelegramMessage, notifyAiFailure, escapeHtml } from "@/lib/telegram";
 import { InboxState } from "../graph";
 import { stripSignature } from "@/lib/html/plain";
 
 export async function warmNode(state: InboxState): Promise<Partial<InboxState>> {
+  await logActivity({
+    orgId: state.lead.orgId,
+    type: "reply_warm",
+    leadId: state.leadId,
+    summary: `Classified reply from ${state.lead.companyName} as warm`,
+  });
+
   await db.lead.update({
     where: { id: state.leadId },
     data: { state: "replied", lastTouchedAt: new Date() },

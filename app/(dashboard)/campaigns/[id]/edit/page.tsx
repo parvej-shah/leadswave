@@ -3,15 +3,16 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { Button, Input, Textarea, Toast, Select } from "@/components/ui";
+import { Button, Input, Toast, Select } from "@/components/ui";
+import { OffersEditor, DEFAULT_OFFERS, type OfferDraft } from "@/components/offers-editor";
 
 type FormValues = {
   name: string;
   businessType: string;
   country: string;
-  websiteOffer: string;
-  crmOffer: string;
   status: string;
+  scoutDepth: string;
+  followupDays: string; // comma-separated days after opener, e.g. "3,7"
 };
 
 export default function EditCampaignPage() {
@@ -22,16 +23,17 @@ export default function EditCampaignPage() {
     name: "",
     businessType: "",
     country: "",
-    websiteOffer: "",
-    crmOffer: "",
     status: "active",
+    scoutDepth: "normal",
+    followupDays: "3",
   });
+  const [offers, setOffers] = useState<OfferDraft[]>([]);
 
   const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
-  const [generatingOffer, setGeneratingOffer] = useState<"website" | "crm" | null>(null);
+  const [generatingOffer, setGeneratingOffer] = useState<number | null>(null);
 
   useEffect(() => {
     fetch(`/api/campaigns/${id}`)
@@ -42,10 +44,29 @@ export default function EditCampaignPage() {
           name: data.name ?? "",
           businessType: data.businessType ?? "",
           country: data.country ?? "",
-          websiteOffer: data.websiteOffer ?? "",
-          crmOffer: data.crmOffer ?? "",
           status: data.status ?? "active",
+          scoutDepth: data.scoutDepth ?? "normal",
+          followupDays: (data.followupOffsets ?? [3]).join(","),
         });
+        const loaded: OfferDraft[] = (data.offers ?? []).map(
+          (o: { key: string; label: string; matchSignal: string; offerText: string; angle: string | null }) => ({
+            key: o.key,
+            label: o.label,
+            matchSignal: o.matchSignal,
+            offerText: o.offerText,
+            angle: o.angle ?? undefined,
+          }),
+        );
+        // Legacy campaigns without offer rows: surface the old two-track
+        // columns as editable offers so nothing silently disappears.
+        setOffers(
+          loaded.length
+            ? loaded
+            : DEFAULT_OFFERS.map((d) => ({
+                ...d,
+                offerText: d.key === "website_proposal" ? data.websiteOffer ?? "" : data.crmOffer ?? "",
+              })),
+        );
       })
       .catch((e: Error) => setLoadError(e.message));
   }, [id]);
@@ -58,26 +79,26 @@ export default function EditCampaignPage() {
     };
   }
 
-  async function generateOffer(type: "website" | "crm") {
-    setGeneratingOffer(type);
+  async function generateOffer(index: number) {
+    const offer = offers[index];
+    if (!offer) return;
+    setGeneratingOffer(index);
     try {
       const res = await fetch("/api/campaigns/description-draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          keywords: [form.name, form.businessType, form.country].filter(Boolean).join(", "),
+          keywords: [form.name, form.businessType, form.country, offer.label].filter(Boolean).join(", "),
           campaignName: form.name,
           query: form.businessType,
           location: form.country,
-          offerType: type,
+          offerLabel: offer.label,
+          matchSignal: offer.matchSignal,
         }),
       });
       const data = await res.json();
       if (res.ok && data.draft) {
-        setForm((f) => ({
-          ...f,
-          [type === "website" ? "websiteOffer" : "crmOffer"]: data.draft,
-        }));
+        setOffers((prev) => prev.map((o, i) => (i === index ? { ...o, offerText: data.draft } : o)));
       }
     } finally {
       setGeneratingOffer(null);
@@ -99,7 +120,18 @@ export default function EditCampaignPage() {
       const res = await fetch(`/api/campaigns/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          name: form.name,
+          businessType: form.businessType,
+          country: form.country,
+          status: form.status,
+          scoutDepth: form.scoutDepth,
+          followupOffsets: form.followupDays
+            .split(",")
+            .map((s) => parseInt(s.trim(), 10))
+            .filter((n) => Number.isFinite(n)),
+          offers: offers.filter((o) => o.label.trim() && o.offerText.trim()),
+        }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -137,7 +169,7 @@ export default function EditCampaignPage() {
       <div className="mb-3">
         <h1 className="ds-h1 m-0 mb-0.5">Edit Campaign</h1>
         <p className="font-mono text-[12px] text-fg-4 m-0">
-          Update targeting and offer text for this campaign.
+          Update targeting and offers for this campaign.
         </p>
       </div>
 
@@ -183,64 +215,44 @@ export default function EditCampaignPage() {
             />
           </div>
 
-          {/* Offer Templates */}
+          {/* Row 3: Scouting depth + follow-up cadence */}
+          <div className="grid grid-cols-2 gap-3">
+            <Select
+              label="Scouting depth"
+              value={form.scoutDepth}
+              onChange={setField("scoutDepth")}
+              disabled={saving}
+            >
+              <option value="light">Light — quick sample, lowest API cost</option>
+              <option value="normal">Normal — balanced (recommended)</option>
+              <option value="deep">Deep — maximum coverage</option>
+            </Select>
+            <Input
+              label="Follow-up days"
+              placeholder="e.g. 3,7"
+              hint="Days after the opener for each follow-up (max 3, min 2-day gaps)."
+              value={form.followupDays}
+              onChange={setField("followupDays")}
+              disabled={saving}
+            />
+          </div>
+
+          {/* Offers */}
           <div className="border-t border-border pt-3 flex flex-col gap-2.5">
             <div className="flex items-center justify-between">
-              <p className="font-mono text-[11px] text-fg-5 m-0 uppercase tracking-wider">Offer Templates</p>
+              <p className="font-mono text-[11px] text-fg-5 m-0 uppercase tracking-wider">Offers</p>
               <p className="font-mono text-[10px] text-fg-5 m-0">AI will personalize per lead at send time</p>
             </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              {/* Website-proposal offer */}
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-fg-4">Website-proposal offer</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    iconStart="sparkle"
-                    disabled={saving || generatingOffer === "website" || (!form.name.trim() && !form.businessType.trim())}
-                    onClick={() => generateOffer("website")}
-                  >
-                    {generatingOffer === "website" ? "Generating…" : "AI Generate"}
-                  </Button>
-                </div>
-                <Textarea
-                  rows={4}
-                  placeholder="Pitch for leads with no website — sell a website build."
-                  value={form.websiteOffer}
-                  onChange={setField("websiteOffer")}
-                  disabled={saving}
-                  hint="Used for leads tagged website_proposal."
-                />
-              </div>
-
-              {/* CRM offer */}
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-fg-4">CRM offer</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    iconStart="sparkle"
-                    disabled={saving || generatingOffer === "crm" || (!form.name.trim() && !form.businessType.trim())}
-                    onClick={() => generateOffer("crm")}
-                  >
-                    {generatingOffer === "crm" ? "Generating…" : "AI Generate"}
-                  </Button>
-                </div>
-                <Textarea
-                  rows={4}
-                  placeholder="Pitch for leads that already have a website — sell CRM."
-                  value={form.crmOffer}
-                  onChange={setField("crmOffer")}
-                  disabled={saving}
-                  hint="Used for leads tagged crm."
-                />
-              </div>
-            </div>
+            <OffersEditor
+              offers={offers}
+              onChange={(next) => {
+                setSaved(false);
+                setOffers(next);
+              }}
+              onGenerate={generateOffer}
+              generatingIndex={generatingOffer}
+              generateDisabled={saving || (!form.name.trim() && !form.businessType.trim())}
+            />
           </div>
 
           {error && <Toast kind="hot" pill="ERROR">{error}</Toast>}

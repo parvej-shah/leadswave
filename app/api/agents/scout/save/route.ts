@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { db } from "@/lib/db";
+import { logActivity } from "@/lib/activity";
 import { MapsLead } from "@/agents/scout/maps-graph";
 
 export async function POST(req: NextRequest) {
@@ -41,6 +42,13 @@ export async function POST(req: NextRequest) {
       state: "discovered",
     })),
     skipDuplicates: true,
+  });
+
+  await logActivity({
+    orgId: ctx.orgId,
+    type: "scouted",
+    campaignId,
+    summary: `Scouted ${result.count} new lead${result.count === 1 ? "" : "s"} into ${campaign.name}`,
   });
 
   return NextResponse.json({ ok: true, savedCount: result.count });

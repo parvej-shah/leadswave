@@ -1,7 +1,15 @@
 import { db } from "@/lib/db";
+import { logActivity } from "@/lib/activity";
 import { InboxState } from "../graph";
 
 export async function bounceNode(state: InboxState): Promise<Partial<InboxState>> {
+  await logActivity({
+    orgId: state.lead.orgId,
+    type: "bounced",
+    leadId: state.leadId,
+    summary: `Email to ${state.lead.companyName} bounced — suppressed`,
+  });
+
   await db.lead.update({
     where: { id: state.leadId },
     data: { state: "bounced", lastTouchedAt: new Date() },
