@@ -340,11 +340,13 @@ export default function CampaignDetailPage() {
               {togglingAutoSend ? "Updating…" : campaign.autoSend ? "Auto Send ON" : "Auto Send OFF"}
             </button>
             {enrichResult && (
-              <span className="font-mono text-[11px] text-fg-3">
-                {enrichResult.emailsFound === 0
+              <span className={`font-mono text-[11px] ${enrichResult.error ? "text-hot" : "text-fg-3"}`}>
+                {enrichResult.error
+                  ? enrichResult.error
+                  : enrichResult.emailsFound === 0
                   ? "No new emails found"
                   : `+${enrichResult.emailsFound} email${enrichResult.emailsFound === 1 ? "" : "s"} found`}
-                {(enrichResult.channelsFound ?? 0) > 0 &&
+                {!enrichResult.error && (enrichResult.channelsFound ?? 0) > 0 &&
                   ` · +${enrichResult.channelsFound} channel${enrichResult.channelsFound === 1 ? "" : "s"}`}
               </span>
             )}
