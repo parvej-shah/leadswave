@@ -1,4 +1,5 @@
 import { searchAllPlaces, searchAllPlacesNearby, PlaceLite } from "@/lib/places/client";
+import { geocodePlace, haversineKm } from "@/lib/places/geocode";
 import { MapsScoutState, MapsLead } from "../maps-graph";
 import { matchOfferKey } from "@/agents/outreach/lib/offer";
 
@@ -11,40 +12,8 @@ const QUADRANT_OFFSETS = [
   { lat: -0.09, lng: -0.11 }, // SW
 ];
 
-// Geocode any place query to lat/lng using the Places API text search (first result's geometry).
-async function geocodePlace(apiKey: string, textQuery: string): Promise<{ lat: number; lng: number } | null> {
-  try {
-    const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": apiKey,
-        "X-Goog-FieldMask": "places.location",
-      },
-      body: JSON.stringify({ textQuery, pageSize: 1 }),
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { places?: Array<{ location?: { latitude?: number; longitude?: number } }> };
-    const loc = data.places?.[0]?.location;
-    if (!loc?.latitude || !loc?.longitude) return null;
-    return { lat: loc.latitude, lng: loc.longitude };
-  } catch {
-    return null;
-  }
-}
-
 function geocodeCity(apiKey: string, city: string, country: string) {
   return geocodePlace(apiKey, `${city}, ${country}`);
-}
-
-function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
-  const R = 6371;
-  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
-  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(s));
 }
 
 // A geocoded "area" further than this from the city centre is treated as a hallucinated
@@ -263,6 +232,8 @@ export async function mapsSearchNode(state: MapsScoutState): Promise<Partial<Map
     rating: p.rating,
     mapsUrl: p.mapsUrl,
     placeId: p.placeId,
+    lat: p.lat,
+    lng: p.lng,
     score: 0,
   }));
 

@@ -26,6 +26,11 @@ export async function GET() {
   for (const key of SECRET_FIELDS) {
     masked[key] = maskSecret(settings[key] as string | null);
   }
+  // Gemini keys are process-env only (round-robin pool, not per-org) — expose
+  // configured status so the UI can show it without a settable field.
+  masked.geminiConfigured = Boolean(
+    process.env.GEMINI_API_KEYS?.trim() || process.env.GEMINI_API_KEY?.trim()
+  );
   return NextResponse.json(masked);
 }
 

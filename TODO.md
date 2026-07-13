@@ -100,6 +100,15 @@ listed here so it isn't forgotten, but not currently blocking.
       pipeline summary via Telegram when digest is enabled. Settings Notifications tab
       has both toggles + "Send digest now" test button.
 
+## Coverage Map
+
+- [x] **Real map: heatmap + status pins + area coverage circles**
+      Shipped (2026-07-13): `/map` page + per-campaign mini-map, backed by
+      `app/api/map/coverage/route.ts`. See `.claude/memory.md` "UX polish +
+      Coverage Map" entry for full detail. Leaflet + leaflet.heat, CARTO
+      dark-matter tiles, zoom-gated status pins, area circles (solid=covered,
+      dashed=planned). Backfilled 613 existing leads' coordinates.
+
 ## Command Palette (⌘K)
 
 - [x] **Lead search inside the palette**

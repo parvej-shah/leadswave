@@ -25,7 +25,7 @@ export type SidebarProps = {
 };
 
 // Map of second-key → route for G→x two-key navigation
-const G_KEYS: Record<string, string> = { d: "/", c: "/campaigns", l: "/leads", i: "/inbox", s: "/settings" };
+const G_KEYS: Record<string, string> = { d: "/", c: "/campaigns", t: "/business-types", l: "/leads", m: "/map", i: "/inbox", s: "/settings" };
 
 export function Sidebar({ userEmail, userName, campaigns, inboxHotCount }: SidebarProps) {
   const pathname = usePathname();

@@ -234,6 +234,8 @@ export async function POST(req: NextRequest) {
           // required by MapsLead type but not used by scoreLead
           category: "crm",
           placeId: lead.id,
+          lat: null,
+          lng: null,
           score: 0,
         });
 

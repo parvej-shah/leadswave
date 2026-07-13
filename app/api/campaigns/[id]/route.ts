@@ -3,6 +3,7 @@ import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { db } from "@/lib/db";
 import { parseSelectedAreas, SelectedAreas } from "@/agents/scout/lib/areas";
 import { normalizeOffers, type OfferInput } from "@/lib/offers";
+import { resolveBusinessType } from "@/lib/business-types";
 
 export async function GET(_req: NextRequest, ctx: RouteContext<"/api/campaigns/[id]">) {
   let org;
@@ -71,6 +72,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
     selectedAreas?: SelectedAreas;
     scoutDepth?: string;
     followupOffsets?: number[];
+    businessTypeId?: string | null;
   } = {};
 
   if (typeof name === "string") data.name = name.trim();
@@ -79,7 +81,11 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
   if (typeof offerText === "string") data.offerText = offerText.trim();
   if (typeof websiteOffer === "string") data.websiteOffer = websiteOffer.trim();
   if (typeof crmOffer === "string") data.crmOffer = crmOffer.trim();
-  if (typeof businessType === "string") data.businessType = businessType.trim();
+  if (typeof businessType === "string") {
+    data.businessType = businessType.trim();
+    const type = await resolveBusinessType(org.orgId, businessType);
+    data.businessTypeId = type?.id ?? null;
+  }
   if (typeof country === "string") data.country = country.trim();
   if (typeof status === "string" && ["active", "paused", "completed"].includes(status)) {
     data.status = status;

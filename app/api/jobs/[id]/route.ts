@@ -7,6 +7,7 @@ import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
  *   { action: "skip" }                — cancel it
  *   { action: "edit", body: string }  — send this exact text instead of the AI draft
  *   { action: "reset" }               — clear the override, back to AI drafting
+ *   { action: "unskip" }              — undo a skip (cancelled → pending, if not yet overdue)
  */
 export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/jobs/[id]">) {
   let org;
@@ -18,6 +19,21 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/jobs/[id]"
 
   const { id } = await ctx.params;
   const { action, body } = (await req.json()) as { action?: string; body?: string };
+
+  if (action === "unskip") {
+    const cancelled = await db.job.findFirst({
+      where: { id, status: "cancelled", lead: { orgId: org.orgId } },
+    });
+    if (!cancelled) return NextResponse.json({ error: "Cancelled job not found" }, { status: 404 });
+    // Only revive jobs the cron would still pick up on schedule — restoring an
+    // already-past job would make it fire immediately on the next run.
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    if (cancelled.scheduledAt < startOfToday)
+      return NextResponse.json({ error: "Too late to restore — its send date has passed" }, { status: 409 });
+    await db.job.update({ where: { id }, data: { status: "pending" } });
+    return NextResponse.json({ ok: true, status: "pending" });
+  }
 
   const job = await db.job.findFirst({
     where: { id, status: "pending", lead: { orgId: org.orgId } },

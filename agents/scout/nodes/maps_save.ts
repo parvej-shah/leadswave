@@ -23,6 +23,8 @@ export async function mapsSaveNode(state: MapsScoutState): Promise<Partial<MapsS
       rating: l.rating,
       mapsUrl: l.mapsUrl,
       placeId: l.placeId,
+      latitude: l.lat,
+      longitude: l.lng,
       score: l.score,
       state: "discovered",
     })),

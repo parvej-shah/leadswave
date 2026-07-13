@@ -32,6 +32,9 @@ import {
   List,
   ListOrdered,
   Quote,
+  MapPin,
+  Layers,
+  AlertTriangle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -69,6 +72,9 @@ export const iconMap = {
   list: List,
   "list-ordered": ListOrdered,
   quote: Quote,
+  map: MapPin,
+  layers: Layers,
+  alert: AlertTriangle,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof iconMap;

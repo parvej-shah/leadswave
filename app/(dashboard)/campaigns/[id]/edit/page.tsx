@@ -28,12 +28,20 @@ export default function EditCampaignPage() {
     followupDays: "3",
   });
   const [offers, setOffers] = useState<OfferDraft[]>([]);
+  const [knownTypes, setKnownTypes] = useState<string[]>([]);
 
   const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [generatingOffer, setGeneratingOffer] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch("/api/business-types")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((types: { name: string }[]) => setKnownTypes(types.map((t) => t.name)))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetch(`/api/campaigns/${id}`)
@@ -202,10 +210,16 @@ export default function EditCampaignPage() {
               label="Business Type"
               placeholder='e.g. "dentists"'
               hint="What kind of business are you targeting?"
+              list="known-business-types"
               value={form.businessType}
               onChange={setField("businessType")}
               disabled={saving}
             />
+            <datalist id="known-business-types">
+              {knownTypes.map((t) => (
+                <option key={t} value={t} />
+              ))}
+            </datalist>
             <Input
               label="Country"
               placeholder='e.g. "Bangladesh"'

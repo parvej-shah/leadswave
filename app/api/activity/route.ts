@@ -13,6 +13,26 @@ export async function GET(req: NextRequest) {
   }
 
   const cursor = req.nextUrl.searchParams.get("cursor");
+  const after = req.nextUrl.searchParams.get("after");
+
+  // Live-poll mode: only events newer than the given id (cheap "anything new?"
+  // check for the dashboard refresher).
+  if (after) {
+    const anchor = await db.activityEvent.findFirst({
+      where: { id: after, orgId: ctx.orgId },
+      select: { createdAt: true },
+    });
+    const fresh = await db.activityEvent.findMany({
+      where: {
+        orgId: ctx.orgId,
+        ...(anchor ? { createdAt: { gt: anchor.createdAt } } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      take: PAGE_SIZE,
+      select: { id: true, type: true, summary: true, createdAt: true },
+    });
+    return NextResponse.json({ events: anchor ? fresh : [], latestId: fresh[0]?.id ?? after });
+  }
 
   const events = await db.activityEvent.findMany({
     where: { orgId: ctx.orgId },

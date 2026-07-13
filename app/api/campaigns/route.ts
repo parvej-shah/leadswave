@@ -4,6 +4,7 @@ import { getSystemSettings } from "@/lib/settings";
 import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { parseSelectedAreas } from "@/agents/scout/lib/areas";
 import { normalizeOffers, type OfferInput } from "@/lib/offers";
+import { resolveBusinessType, resolveOfferText } from "@/lib/business-types";
 
 export async function GET() {
   let ctx;
@@ -74,6 +75,7 @@ export async function POST(req: NextRequest) {
 
   const settings = await getSystemSettings(ctx.orgId);
   const normalizedOffers = normalizeOffers(offers, { websiteOffer, crmOffer });
+  const type = await resolveBusinessType(ctx.orgId, businessType);
 
   const campaign = await db.campaign.create({
     data: {
@@ -81,8 +83,13 @@ export async function POST(req: NextRequest) {
       name,
       query: resolvedQuery,
       location: resolvedLocation,
-      offerText: offerText || settings?.offerText || "",
+      offerText: resolveOfferText({
+        campaignOffer: offerText,
+        typeDefaultOffer: type?.defaultOffer,
+        settingsOffer: settings?.offerText,
+      }),
       businessType: businessType || null,
+      businessTypeId: type?.id ?? null,
       country: country || null,
       selectedCities: cities,
       selectedAreas: Object.keys(areas).length > 0 ? areas : undefined,

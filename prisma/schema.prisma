@@ -65,7 +65,9 @@ model Campaign {
   country        String?
   selectedCities String[]  @default([])
   selectedAreas  Json?     // { [city: string]: string[] } — user-selected hotspot areas per city
-  businessType   String?
+  businessType   String?   // denormalized display/fallback; businessTypeId is the source of truth for grouping
+  businessTypeId String?
+  businessTypeRef BusinessType? @relation(fields: [businessTypeId], references: [id])
   websiteOffer   String?
   crmOffer       String?
   status         String    @default("active") // active | paused | completed
@@ -77,6 +79,19 @@ model Campaign {
   createdAt      DateTime  @default(now())
   deletedAt      DateTime?
 
+  @@index([orgId])
+  @@index([businessTypeId])
+}
+
+model BusinessType {
+  id           String     @id @default(cuid())
+  orgId        String
+  name         String
+  defaultOffer String?    // inherited by campaigns whose own offerText is blank
+  campaigns    Campaign[]
+  createdAt    DateTime   @default(now())
+
+  @@unique([orgId, name])
   @@index([orgId])
 }
 
@@ -116,6 +131,8 @@ model Lead {
   rating        Float?
   mapsUrl       String?
   placeId       String?
+  latitude      Float?    // from Places location field (or backfill-geo script)
+  longitude     Float?
   score         Int       @default(0)
   state          String    @default("discovered")
   lastTouchedAt  DateTime?
@@ -128,6 +145,17 @@ model Lead {
 
   @@unique([campaignId, placeId])
   @@index([orgId])
+}
+
+// Geocoding cache for the coverage map: each area/city string is geocoded via
+// Places exactly once ever. Not org-scoped — a place name's coordinates are
+// not tenant data.
+model GeoCache {
+  id        String   @id @default(cuid())
+  query     String   @unique
+  lat       Float
+  lng       Float
+  createdAt DateTime @default(now())
 }
 
 model Message {

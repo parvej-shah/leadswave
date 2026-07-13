@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, Card, CardBody, CardHeader, Input, Label, Select } from "@/components/ui";
+import { Button, Card, CardBody, CardHeader, Input, Label, Select, SkeletonRows } from "@/components/ui";
 
 type Member = {
   membershipId: string;
@@ -105,9 +105,7 @@ export function TeamPanel() {
   if (loading) {
     return (
       <Card>
-        <CardBody>
-          <p className="font-mono text-[12px] text-fg-4 m-0">Loading team…</p>
-        </CardBody>
+        <SkeletonRows n={3} rowClassName="h-[52px]" />
       </Card>
     );
   }

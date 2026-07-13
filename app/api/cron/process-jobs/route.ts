@@ -9,7 +9,7 @@ import { stripSignature } from "@/lib/html/plain";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { sendsDisabled, dryRunSend } from "@/lib/email/guard";
 import { getSystemSettings } from "@/lib/settings";
-import { logActivity } from "@/lib/activity";
+import { logActivity, logError } from "@/lib/activity";
 
 // Opener-spirited fallbacks when AI is unavailable. Distinct per step so a
 // lead's sequence isn't three identical strings. No pitch / no CTA.
@@ -85,6 +85,12 @@ export async function POST(req: NextRequest) {
     const settings = await getSystemSettings(orgId);
     if (!settings.resendApiKey || !settings.fromEmail) {
       console.log(`[cron] org ${orgId}: no sending credentials — ${orgJobs.length} job(s) left pending`);
+      await logError(
+        orgId,
+        `${orgJobs.length} follow-up(s) waiting — sending credentials are missing`,
+        "/settings?tab=keys",
+        "missing-send-creds",
+      );
       continue;
     }
 
@@ -259,6 +265,12 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         console.error(`[cron] Failed to send follow-up for lead ${lead.id}:`, err);
         await db.job.update({ where: { id: job.id }, data: { status: "failed" } });
+        await logError(
+          orgId,
+          `Follow-up to ${lead.companyName} failed to send`,
+          "/leads",
+          `send-failed:${lead.id}`,
+        );
         orgFailed++;
         failed++;
       }

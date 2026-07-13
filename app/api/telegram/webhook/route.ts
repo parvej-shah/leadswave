@@ -4,7 +4,7 @@ import { createEvent } from "@/lib/calendar/client";
 import { getSystemSettings } from "@/lib/settings";
 import { getOrgOwnerGoogleToken } from "@/lib/tenant";
 import { sendsDisabled, dryRunSend } from "@/lib/email/guard";
-import { logActivity } from "@/lib/activity";
+import { logActivity, logError } from "@/lib/activity";
 
 type TelegramUpdate = {
   message?: {
@@ -131,6 +131,12 @@ async function handleConfirm(pendingId: string, slotIndex: number, chatId: numbe
 
   if (!event) {
     await replyToChat(chatId, `❌ Failed to create calendar event. Try again or book manually.`);
+    await logError(
+      orgId,
+      `Could not book meeting with ${ctx.companyName} — Google Calendar rejected the request`,
+      "/settings?tab=connection",
+      "calendar-book-failed",
+    );
     return;
   }
 

@@ -59,10 +59,20 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { id, companyName, email, website, state } = body;
+    const { id, action, companyName, email, website, state } = body;
 
     if (!id) {
       return NextResponse.json({ error: "Lead ID is required" }, { status: 400 });
+    }
+
+    // Undo for the soft delete in DELETE above.
+    if (action === "restore") {
+      const { count } = await db.lead.updateMany({
+        where: { id, orgId: ctx.orgId },
+        data: { deletedAt: null },
+      });
+      if (count === 0) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+      return NextResponse.json({ ok: true, restored: true });
     }
 
     const current = await db.lead.findFirst({

@@ -34,6 +34,7 @@ type Settings = {
   enrichmentApiKey: string;
   apifyApiKey: string;
   googleMapsApiKey: string;
+  geminiConfigured: boolean;
   telegramChatId: string;
   googleClientId: string;
   googleClientSecret: string;
@@ -72,6 +73,7 @@ const DEFAULTS: Settings = {
   enrichmentApiKey: "",
   apifyApiKey: "",
   googleMapsApiKey: "",
+  geminiConfigured: false,
   telegramChatId: "",
   googleClientId: "",
   googleClientSecret: "",
@@ -409,6 +411,24 @@ export default function SettingsPage() {
                 value={form.apifyApiKey}
                 onChange={(v) => set("apifyApiKey", v)}
               />
+              <div>
+                <Label>Gemini API key</Label>
+                {form.geminiConfigured ? (
+                  <div className="flex items-center gap-2 font-mono text-[12px] text-success">
+                    <Icon name="check" size={14} />
+                    configured on the server
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 font-mono text-[12px] text-hot">
+                    <Icon name="alert" size={14} />
+                    not configured
+                  </div>
+                )}
+                <p className="font-mono text-[11px] text-fg-4 mt-1.5">
+                  Set via GEMINI_API_KEY / GEMINI_API_KEYS in the server environment — shared
+                  across all orgs with round-robin quota cooldown, not editable per-org here.
+                </p>
+              </div>
             </CardBody>
           </Card>
         )}

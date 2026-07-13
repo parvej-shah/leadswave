@@ -26,6 +26,8 @@ export type MapsLead = {
   rating: number | null;
   mapsUrl: string | null;
   placeId: string;
+  lat: number | null;
+  lng: number | null;
   score: number; // 0-100 quality score computed after enrichment
 };
 

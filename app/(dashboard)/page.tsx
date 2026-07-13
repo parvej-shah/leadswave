@@ -7,6 +7,8 @@ import { Badge, Button, Card, CardHeader, EmptyState, Icon, KPI } from "@/compon
 import { RunFollowupsButton } from "./run-followups-button";
 import { DashboardPeriodSwitcher } from "./dashboard-period-switcher";
 import { FollowupQueue } from "./followup-queue";
+import { NeedsFixing, type FixItem } from "./needs-fixing";
+import { LiveRefresher } from "./live-refresher";
 
 type Period = "24h" | "7d" | "30d" | "ytd";
 
@@ -164,6 +166,28 @@ export default async function DashboardPage({
   // Fresh org (no campaigns, no sending config): guide instead of blank charts.
   if (campaigns.length === 0 && !orgSettings?.fromEmail) redirect("/onboarding");
 
+  // "Needs fixing" strip: actionable errors from the last 24h, deduped by meta.key.
+  const errorEvents = await db.activityEvent.findMany({
+    where: { orgId, type: "error", createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+  });
+  const seenKeys = new Set<string>();
+  const fixItems: FixItem[] = [];
+  for (const ev of errorEvents) {
+    const meta = (ev.meta ?? {}) as { fix?: string; key?: string };
+    if (meta.key) {
+      if (seenKeys.has(meta.key)) continue;
+      seenKeys.add(meta.key);
+    }
+    fixItems.push({
+      id: ev.id,
+      summary: ev.summary,
+      fix: meta.fix ?? null,
+      createdAt: ev.createdAt.toISOString(),
+    });
+  }
+
   const dailyLimit = orgSettings?.dailySendLimit ?? 100;
   const allOutbound = await db.message.count({ where: { direction: "outbound", lead: { orgId } } });
   const bounceRate = allOutbound > 0 ? ((bouncedCount / allOutbound) * 100).toFixed(1) : "0.0";
@@ -270,6 +294,7 @@ export default async function DashboardPage({
 
   return (
     <div className="flex flex-col gap-6">
+      <LiveRefresher latestEventId={events[0]?.id ?? null} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
@@ -289,6 +314,9 @@ export default async function DashboardPage({
           </Link>
         </div>
       </div>
+
+      {/* Needs fixing — actionable failures first */}
+      {fixItems.length > 0 && <NeedsFixing items={fixItems.slice(0, 5)} />}
 
       {/* Needs attention */}
       {attentionItems.length > 0 && <NeedsAttention items={attentionItems} />}
@@ -530,6 +558,7 @@ const EVENT_DOT: Record<string, string> = {
   suppressed: "var(--hot)",
   reply_cold: "var(--fg-5)",
   scouted: "var(--success)",
+  error: "var(--hot)",
 };
 
 function EventStream({

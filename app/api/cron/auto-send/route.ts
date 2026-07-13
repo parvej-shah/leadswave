@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getSystemSettings } from "@/lib/settings";
 import { outreachGraph } from "@/agents/outreach/graph";
 import { sendTelegramMessage, escapeHtml } from "@/lib/telegram";
+import { logError } from "@/lib/activity";
 
 const MAX_PER_RUN = 1; // one lead per invocation — the GH Actions workflow loops with spacing
 
@@ -52,6 +53,12 @@ export async function POST(req: NextRequest) {
     const settings = await getSystemSettings(orgId);
     if (!settings.resendApiKey || !settings.fromEmail) {
       console.log(`[auto-send] org ${orgId}: no sending credentials — skipped`);
+      await logError(
+        orgId,
+        "Auto-send skipped — sending credentials are missing",
+        "/settings?tab=keys",
+        "missing-send-creds",
+      );
       continue;
     }
 

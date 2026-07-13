@@ -7,6 +7,7 @@ export { Sparkline } from "./sparkline";
 export { KPI, DeltaPill } from "./kpi";
 export { Dialog } from "./dialog";
 export { Toast, type ToastProps } from "./toast";
+export { Skeleton, SkeletonRows } from "./skeleton";
 export { EmptyState } from "./empty-state";
 export { DirectionTag, type Direction } from "./direction-tag";
 export { Kbd } from "./kbd";

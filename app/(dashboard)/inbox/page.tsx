@@ -9,12 +9,14 @@ import {
   Icon,
   Kbd,
   Segmented,
+  SkeletonRows,
   Toast,
 } from "@/components/ui";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { RichTextViewer } from "@/components/rich-text-viewer";
 import { plainToHtml } from "@/lib/html/plain";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/components/ui/toaster";
 
 type Message = {
   id: string;
@@ -70,6 +72,7 @@ function snippet(lead: InboxLead): string {
 type Filter = "all" | "hot" | "warm";
 
 export default function InboxPage() {
+  const { toast } = useToast();
   const [leads, setLeads] = useState<InboxLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<InboxLead | null>(null);
@@ -77,7 +80,6 @@ export default function InboxPage() {
   const [draftHtml, setDraftHtml] = useState("");
   const [aiDraftOriginal, setAiDraftOriginal] = useState("");
   const [sending, setSending] = useState(false);
-  const [sentToast, setSentToast] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [generatingDraft, setGeneratingDraft] = useState(false);
   const [suppressed, setSuppressed] = useState<Set<string>>(new Set());
@@ -110,19 +112,14 @@ export default function InboxPage() {
 
   async function handleSendReply() {
     if (!selected || !draftText.trim()) return;
+    const target = selected;
+    const prevLeads = leads;
+    const prevDraft = { text: draftText, html: draftHtml, ai: aiDraftOriginal };
     setSending(true);
     setSendError(null);
-    const res = await fetch("/api/inbox/reply", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ leadId: selected.id, body: draftText, bodyHtml: draftHtml }),
-    });
-    setSending(false);
-    if (!res.ok) {
-      const data = await res.json();
-      setSendError(data.error ?? "Failed to send");
-      return;
-    }
+
+    // Optimistic: show the reply in the thread and clear the composer;
+    // roll both back if the send fails.
     const newMsg: Message = {
       id: crypto.randomUUID(),
       direction: "outbound",
@@ -132,17 +129,39 @@ export default function InboxPage() {
       sentAt: new Date().toISOString(),
     };
     const updated: InboxLead = {
-      ...selected,
+      ...target,
       state: "converted",
-      messages: [...selected.messages.filter((m) => m.direction !== "system"), newMsg],
+      messages: [...target.messages.filter((m) => m.direction !== "system"), newMsg],
     };
-    setLeads((prev) => prev.map((l) => (l.id === selected.id ? updated : l)));
+    setLeads((prev) => prev.map((l) => (l.id === target.id ? updated : l)));
     setSelected(updated);
     setDraftText("");
     setDraftHtml("");
     setAiDraftOriginal("");
-    setSentToast(true);
-    setTimeout(() => setSentToast(false), 2800);
+
+    try {
+      const res = await fetch("/api/inbox/reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId: target.id, body: prevDraft.text, bodyHtml: prevDraft.html }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Failed to send");
+      }
+      toast({ kind: "success", pill: "SENT", message: `Reply sent to ${target.companyName}.` });
+    } catch (err) {
+      setLeads(prevLeads);
+      setSelected((cur) => (cur?.id === target.id ? target : cur));
+      setDraftText(prevDraft.text);
+      setDraftHtml(prevDraft.html);
+      setAiDraftOriginal(prevDraft.ai);
+      const msg = err instanceof Error ? err.message : "Failed to send";
+      setSendError(msg);
+      toast({ kind: "hot", pill: "ERROR", message: `${msg} — draft restored.` });
+    } finally {
+      setSending(false);
+    }
   }
 
   async function handleAiWrite() {
@@ -170,10 +189,27 @@ export default function InboxPage() {
     }
   }
 
-  const handleNotInterested = useCallback((leadId: string) => {
-    setSuppressed((prev) => new Set(prev).add(leadId));
-    setSelected((cur) => (cur?.id === leadId ? null : cur));
-  }, []);
+  const handleNotInterested = useCallback(
+    (leadId: string) => {
+      setSuppressed((prev) => new Set(prev).add(leadId));
+      setSelected((cur) => (cur?.id === leadId ? null : cur));
+      toast({
+        kind: "info",
+        pill: "ARCHIVED",
+        message: "Thread archived.",
+        action: {
+          label: "Undo",
+          onAction: () =>
+            setSuppressed((prev) => {
+              const n = new Set(prev);
+              n.delete(leadId);
+              return n;
+            }),
+        },
+      });
+    },
+    [toast],
+  );
 
   const visible = useMemo(() => leads.filter((l) => !suppressed.has(l.id)), [leads, suppressed]);
   const hotCount = visible.filter((l) => classifyLead(l) === "hot").length;
@@ -278,14 +314,7 @@ export default function InboxPage() {
 
         {/* List body */}
         <div className="flex-1 overflow-y-auto min-h-0">
-          {loading &&
-            [...Array(4)].map((_, i) => (
-              <div
-                key={i}
-                className="h-16 ds-pulse border-b border-border-soft"
-                style={{ background: "oklch(0.12 0 0)", animationDelay: `${i * 70}ms` }}
-              />
-            ))}
+          {loading && <SkeletonRows n={4} rowClassName="h-16" />}
 
           {!loading && filteredThreads.length === 0 && (
             <div className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center">
@@ -430,13 +459,7 @@ export default function InboxPage() {
             )}
 
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              {sentToast ? (
-                <Toast kind="success" pill="SENT">
-                  Reply sent to {selected.companyName}
-                </Toast>
-              ) : (
-                <span />
-              )}
+              <span />
               <div className="flex gap-2 ml-auto">
                 <Button
                   variant="info"

@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { logActivity } from "@/lib/activity";
+import { logActivity, logError } from "@/lib/activity";
 import { sendTelegramMessage, notifyAiFailure, escapeHtml } from "@/lib/telegram";
 import { generateText } from "@/lib/gemini";
 import { getAvailableSlots, createEvent, Slot } from "@/lib/calendar/client";
@@ -120,7 +120,15 @@ async function bookMeeting(
     settings.calendarId ?? "primary", slot, title, state.lead.email!,
   ).catch((err) => { console.error("[hot] Calendar error:", err); return null; });
 
-  if (!event) return false;
+  if (!event) {
+    await logError(
+      state.lead.orgId,
+      `Could not book meeting with ${state.lead.companyName} — Google Calendar rejected the request`,
+      "/settings?tab=connection",
+      "calendar-book-failed",
+    );
+    return false;
+  }
 
   await db.calendarEvent.create({
     data: {
@@ -309,6 +317,12 @@ export async function hotNode(state: InboxState): Promise<Partial<InboxState>> {
     : null;
 
   if (!settings?.googleClientId || !settings.googleClientSecret || !settings.googleRefreshToken) {
+    await logError(
+      orgId,
+      `${state.lead.companyName} wants to meet but Google Calendar isn't connected — booking skipped`,
+      "/settings?tab=connection",
+      "calendar-not-connected",
+    );
     // No calendar — just notify
     if (state.telegramChatId) {
       const snippet = state.inboundEmail.body.slice(0, 200).replace(/\n/g, " ");

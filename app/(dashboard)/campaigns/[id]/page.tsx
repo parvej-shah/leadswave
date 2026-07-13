@@ -19,6 +19,7 @@ import {
   type LeadState,
 } from "@/components/ui";
 import { WhatsAppButton } from "@/components/whatsapp-button";
+import { CoverageMapClient } from "../../map/coverage-map-client";
 
 type Lead = {
   id: string;
@@ -427,6 +428,19 @@ export default function CampaignDetailPage() {
             }
             color={stats.bounced + stats.complained > 0 ? "hot" : undefined}
           />
+        </div>
+      )}
+
+      {/* Coverage mini-map */}
+      {stats && stats.totalLeads > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4 m-0">Coverage</p>
+            <Link href={`/map?campaignId=${id}`} className="font-mono text-[10px] text-fg-5 hover:text-amber transition-colors">
+              Open full map →
+            </Link>
+          </div>
+          <CoverageMapClient campaignId={id} compact />
         </div>
       )}
 

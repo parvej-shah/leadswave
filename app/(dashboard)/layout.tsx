@@ -5,6 +5,7 @@ import { Sidebar, type SidebarCampaign } from "./sidebar";
 import { MobileTabBar } from "./mobile-tab-bar";
 import { MobileTopBar } from "./mobile-top-bar";
 import { CommandPalette } from "./command-palette";
+import { Toaster } from "@/components/ui/toaster";
 
 export default async function DashboardLayout({
   children,
@@ -36,6 +37,7 @@ export default async function DashboardLayout({
   }));
 
   return (
+    <Toaster>
     <div className="flex min-h-screen bg-canvas">
       <Sidebar
         userEmail={session.user.email ?? ""}
@@ -55,5 +57,6 @@ export default async function DashboardLayout({
       <MobileTabBar inboxHotCount={inboxHotCount} />
       <CommandPalette campaigns={campaigns.map((c) => ({ id: c.id, name: c.name }))} />
     </div>
+    </Toaster>
   );
 }

@@ -210,7 +210,7 @@ function LeadRow({ lead, checked, onToggle }: LeadRowProps) {
   return (
     <div
       className={[
-        "flex items-start gap-3 rounded-lg border px-3 py-3 cursor-pointer transition-colors duration-150",
+        "flex items-start gap-3 rounded-lg border px-3 py-3 cursor-pointer transition-colors duration-150 animate-in fade-in slide-in-from-bottom-1",
         checked
           ? "bg-amber-bg border-amber-border"
           : "bg-[oklch(0.12_0_0)] border-[oklch(0.19_0_0)] hover:border-[oklch(0.26_0_0)]",
@@ -284,7 +284,15 @@ export function NewCampaignWizard() {
   const [phase, setPhase] = useState<Phase>("details");
   const [name, setName] = useState("");
   const [businessType, setBusinessType] = useState("");
+  const [knownTypes, setKnownTypes] = useState<string[]>([]);
   const [country, setCountry] = useState("");
+
+  useEffect(() => {
+    fetch("/api/business-types")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((types: { name: string }[]) => setKnownTypes(types.map((t) => t.name)))
+      .catch(() => {});
+  }, []);
   const [offers, setOffers] = useState<OfferDraft[]>(DEFAULT_OFFERS);
   const [scoutDepth, setScoutDepth] = useState("normal");
 
@@ -626,9 +634,15 @@ export function NewCampaignWizard() {
               label="Business Type"
               placeholder='e.g. "dentists"'
               hint="What kind of business?"
+              list="known-business-types"
               value={businessType}
               onChange={(e) => setBusinessType(e.target.value)}
             />
+            <datalist id="known-business-types">
+              {knownTypes.map((t) => (
+                <option key={t} value={t} />
+              ))}
+            </datalist>
             <Input
               label="Country"
               placeholder='e.g. "Bangladesh"'

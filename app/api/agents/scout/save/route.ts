@@ -38,6 +38,8 @@ export async function POST(req: NextRequest) {
       rating: l.rating,
       mapsUrl: l.mapsUrl,
       placeId: l.placeId,
+      latitude: l.lat ?? null,
+      longitude: l.lng ?? null,
       score: l.score ?? 0,
       state: "discovered",
     })),

@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Button, Card, CardHeader, EmptyState, Textarea } from "@/components/ui";
+import { Button, Card, CardHeader, EmptyState, SkeletonRows, Textarea } from "@/components/ui";
+import { useToast } from "@/components/ui/toaster";
+import { LIVE_REFRESH_EVENT } from "./live-refresher";
 
 type QueueJob = {
   id: string;
@@ -30,6 +32,7 @@ const STEP_LABEL: Record<string, string> = {
  * what goes out next and can intervene.
  */
 export function FollowupQueue() {
+  const { toast } = useToast();
   const [jobs, setJobs] = useState<QueueJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -49,6 +52,11 @@ export function FollowupQueue() {
 
   useEffect(() => {
     refresh();
+    // Refetch on the dashboard's live-poll tick so the queue stays in sync
+    // with the server-rendered cards.
+    const onLive = () => refresh();
+    window.addEventListener(LIVE_REFRESH_EVENT, onLive);
+    return () => window.removeEventListener(LIVE_REFRESH_EVENT, onLive);
   }, []);
 
   async function openPreview(job: QueueJob) {
@@ -69,17 +77,77 @@ export function FollowupQueue() {
     }
   }
 
-  async function act(id: string, action: "skip" | "edit" | "reset", body?: string) {
+  async function patchJob(id: string, payload: Record<string, string>) {
+    const res = await fetch(`/api/jobs/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error ?? "Request failed");
+    }
+  }
+
+  async function handleSkip(job: QueueJob) {
+    // Optimistic: drop the row immediately, restore on failure.
+    const snapshot = jobs;
+    setJobs((prev) => prev.filter((j) => j.id !== job.id));
+    if (openId === job.id) setOpenId(null);
     setBusy(true);
     try {
-      await fetch(`/api/jobs/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, body }),
+      await patchJob(job.id, { action: "skip" });
+      toast({
+        kind: "success",
+        pill: "SKIPPED",
+        message: `Follow-up to ${job.lead.companyName} skipped.`,
+        action: {
+          label: "Undo",
+          onAction: async () => {
+            try {
+              await patchJob(job.id, { action: "unskip" });
+              setJobs((prev) =>
+                prev.some((j) => j.id === job.id)
+                  ? prev
+                  : [...prev, job].sort(
+                      (a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime(),
+                    ),
+              );
+            } catch (err) {
+              toast({
+                kind: "hot",
+                pill: "ERROR",
+                message: err instanceof Error ? err.message : "Could not restore follow-up.",
+              });
+            }
+          },
+        },
       });
+    } catch (err) {
+      setJobs(snapshot);
+      toast({
+        kind: "hot",
+        pill: "ERROR",
+        message: err instanceof Error ? err.message : "Skip failed.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function act(id: string, action: "edit" | "reset", body?: string) {
+    setBusy(true);
+    try {
+      await patchJob(id, body !== undefined ? { action, body } : { action });
       setOpenId(null);
       setEditing(false);
       await refresh();
+    } catch (err) {
+      toast({
+        kind: "hot",
+        pill: "ERROR",
+        message: err instanceof Error ? err.message : "Update failed.",
+      });
     } finally {
       setBusy(false);
     }
@@ -97,7 +165,7 @@ export function FollowupQueue() {
         Scheduled Follow-ups
       </CardHeader>
       {loading ? (
-        <p className="font-mono text-[12px] text-fg-4 px-5 py-4 m-0">Loading queue…</p>
+        <SkeletonRows n={3} rowClassName="h-[52px]" />
       ) : jobs.length === 0 ? (
         <div className="p-5">
           <EmptyState>Nothing queued — follow-ups appear here before they send.</EmptyState>
@@ -105,7 +173,7 @@ export function FollowupQueue() {
       ) : (
         <div className="flex flex-col max-h-[360px] overflow-y-auto">
           {jobs.map((job) => (
-            <div key={job.id} className="border-b border-border-soft last:border-b-0">
+            <div key={job.id} className="border-b border-border-soft last:border-b-0 animate-in fade-in slide-in-from-bottom-1 duration-200">
               <div className="flex items-center gap-3 px-5 py-2.5">
                 <div className="flex-1 min-w-0">
                   <p className="font-mono text-[13px] text-fg-1 m-0 truncate">
@@ -123,7 +191,7 @@ export function FollowupQueue() {
                 <Button variant="ghost" size="sm" onClick={() => openPreview(job)}>
                   {openId === job.id ? "Close" : "Preview"}
                 </Button>
-                <Button variant="ghost" size="sm" disabled={busy} onClick={() => act(job.id, "skip")}>
+                <Button variant="ghost" size="sm" disabled={busy} onClick={() => handleSkip(job)}>
                   Skip
                 </Button>
               </div>

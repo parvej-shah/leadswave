@@ -19,11 +19,13 @@ import {
   Label,
   Segmented,
   Select,
+  SkeletonRows,
   StateBadge,
   Toast,
   type LeadState,
 } from "@/components/ui";
 import { WhatsAppButton } from "@/components/whatsapp-button";
+import { useToast } from "@/components/ui/toaster";
 
 type Lead = {
   id: string;
@@ -117,6 +119,7 @@ function truncateUrl(href: string): string {
 }
 
 export default function LeadsPage() {
+  const { toast } = useToast();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [campaignFilter, setCampaignFilter] = useState("all");
@@ -262,16 +265,18 @@ export default function LeadsPage() {
   async function handleSend(id: string) {
     setSending(id);
     setSendError(null);
-    const res = await fetch("/api/agents/outreach", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ leadId: id }),
-    });
-    setSending(null);
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setSendError({ id, msg: data.error ?? "Send failed" });
-    } else {
+    try {
+      const res = await fetch("/api/agents/outreach", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId: id }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setSendError({ id, msg: data.error ?? "Send failed" });
+        toast({ kind: "hot", pill: "ERROR", message: data.error ?? "Send failed" });
+        return;
+      }
       setLeads((prev) =>
         prev.map((l) =>
           l.id === id
@@ -279,6 +284,12 @@ export default function LeadsPage() {
             : l
         )
       );
+      toast({ kind: "success", pill: "SENT", message: "Opener sent." });
+    } catch {
+      setSendError({ id, msg: "Network error — nothing sent" });
+      toast({ kind: "hot", pill: "ERROR", message: "Network error — nothing sent." });
+    } finally {
+      setSending(null);
     }
   }
 
@@ -319,16 +330,43 @@ export default function LeadsPage() {
   }
 
   async function handleRemove(id: string) {
+    const snapshot = leads;
+    const removed = leads.find((l) => l.id === id);
     setRemoving(id);
-    await fetch(`/api/leads?id=${id}`, { method: "DELETE" });
+    // Optimistic: drop the row immediately, roll back if the delete fails.
     setLeads((prev) => prev.filter((l) => l.id !== id));
     setSelection((s) => {
       const n = new Set(s);
       n.delete(id);
       return n;
     });
-    setRemoving(null);
     setDeletingLead(null);
+    try {
+      const res = await fetch(`/api/leads?id=${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      toast({
+        kind: "success",
+        pill: "REMOVED",
+        message: `${removed?.companyName ?? "Lead"} removed.`,
+        action: {
+          label: "Undo",
+          onAction: async () => {
+            const r = await fetch("/api/leads", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id, action: "restore" }),
+            });
+            if (r.ok) setLeads((prev) => (removed ? [removed, ...prev] : prev));
+            else toast({ kind: "hot", pill: "ERROR", message: "Could not restore lead." });
+          },
+        },
+      });
+    } catch {
+      setLeads(snapshot);
+      toast({ kind: "hot", pill: "ERROR", message: "Delete failed — lead restored." });
+    } finally {
+      setRemoving(null);
+    }
   }
 
   async function handleUpdateLead(e: React.FormEvent) {
@@ -524,13 +562,7 @@ export default function LeadsPage() {
       {/* Skeleton */}
       {loading && (
         <div className="border border-border rounded-lg overflow-hidden">
-          {[...Array(6)].map((_, i) => (
-            <div
-              key={i}
-              className="h-11 ds-pulse border-b border-border-soft last:border-b-0"
-              style={{ background: "oklch(0.12 0 0)", animationDelay: `${i * 60}ms` }}
-            />
-          ))}
+          <SkeletonRows n={6} rowClassName="h-11" />
         </div>
       )}
 

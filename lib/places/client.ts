@@ -8,6 +8,7 @@ const FIELD_MASK = [
   "places.internationalPhoneNumber",
   "places.rating",
   "places.googleMapsUri",
+  "places.location",
   "nextPageToken",
 ].join(",");
 
@@ -19,6 +20,8 @@ export type PlaceLite = {
   phone: string | null;
   rating: number | null;
   mapsUrl: string | null;
+  lat: number | null;
+  lng: number | null;
 };
 
 type RawPlace = {
@@ -29,6 +32,7 @@ type RawPlace = {
   internationalPhoneNumber?: string;
   rating?: number;
   googleMapsUri?: string;
+  location?: { latitude?: number; longitude?: number };
 };
 
 function toPlaceLite(p: RawPlace): PlaceLite | null {
@@ -41,6 +45,8 @@ function toPlaceLite(p: RawPlace): PlaceLite | null {
     phone: p.internationalPhoneNumber ?? null,
     rating: typeof p.rating === "number" ? p.rating : null,
     mapsUrl: p.googleMapsUri ?? null,
+    lat: typeof p.location?.latitude === "number" ? p.location.latitude : null,
+    lng: typeof p.location?.longitude === "number" ? p.location.longitude : null,
   };
 }
 

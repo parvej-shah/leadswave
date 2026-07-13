@@ -11,6 +11,53 @@ Format: one bullet per item, newest on top. Convert relative dates to absolute.
 
 ## Live decisions
 
+- **UX polish + Coverage Map shipped on top of Stage A/B.** (2026-07-13)
+  - **Toast/undo system**: `components/ui/toaster.tsx` (`<Toaster>` context +
+    `useToast()`, stacked bottom-right queue, tw-animate-css enter/exit). Mounted in
+    the dashboard layout. Undo wired for: lead delete (`PATCH /api/leads
+    {action:"restore"}`, clears `deletedAt`), follow-up skip (`PATCH
+    /api/jobs/[id] {action:"unskip"}`, cancelled→pending, rejects if
+    `scheduledAt` is already past — cron would otherwise fire it immediately),
+    inbox archive (local-only, trivial undo).
+  - **Optimistic UI with rollback**: leads remove/send, inbox reply/archive,
+    followup-queue skip all snapshot→apply→request→rollback-on-`!res.ok`, paired
+    with toast feedback (success or error).
+  - **Skeletons**: `components/ui/skeleton.tsx` (`<Skeleton>`, `<SkeletonRows n>`)
+    replaces ad-hoc `ds-pulse` loaders; `app/(dashboard)/loading.tsx` added
+    (server-nav fallback).
+  - **"Needs fixing" error surface**: `ActivityType` gained `"error"`;
+    `logError(orgId, summary, fix?, key?)` in `lib/activity.ts` dedupes by
+    `meta.key` within 24h so cron reruns don't spam the feed. Emitters: missing
+    send creds (process-jobs, auto-send), per-lead send failures, calendar
+    booking failures (hot.ts + telegram confirm flow), spam complaints (status
+    webhook). Dashboard renders a red strip (`needs-fixing.tsx`) above
+    Needs-Attention with dismiss (client-side only) + Fix→ links.
+  - **Live-ish dashboard**: `GET /api/activity?after=<id>` returns only newer
+    events; `live-refresher.tsx` polls every 15s while the tab is visible, calls
+    `router.refresh()` on new activity and dispatches a `leadswave:live-refresh`
+    window event that `FollowupQueue` also listens to. No SSE — stays
+    serverless-friendly.
+  - **Coverage map** (owner's idea): `places.location` added to the Places
+    FIELD_MASK (`lib/places/client.ts`); `Lead.latitude/longitude Float?`
+    columns; scout pipeline (`maps_search.ts` → `maps-graph.ts` → `maps_save.ts`
+    + scout/save route) now carries lat/lng end to end. Backfilled all 613
+    pre-existing leads via `scripts/backfill-geo.ts` (Places GET location-only
+    SKU) — 573/574 geocodable leads succeeded (1 place gone from Places; 39
+    leads never had a placeId, e.g. imports). Watch out: the Places
+    `GetPlaceRequest` quota is 600/min — the script batches at 5 concurrent with
+    a 600ms gap and retries 429s with backoff; don't raise concurrency without
+    also raising the delay.
+    `app/api/map/coverage/route.ts` returns geocoded leads + area circles
+    (`Campaign.selectedAreas` geocoded via new `GeoCache` model — each area
+    string hits Places exactly once ever, via `lib/places/geocode.ts`
+    `geocodeCached`) + stats. UI: `components/coverage-map.tsx` (Leaflet +
+    leaflet.heat, CARTO dark-matter tiles, zoom-gated pins ≥11, area circles
+    solid=covered/dashed=planned), loaded client-only via
+    `app/(dashboard)/map/coverage-map-client.tsx` (`next/dynamic`, `ssr:false`).
+    Both a dedicated `/map` page and a per-campaign mini-map (`compact` prop) on
+    the campaign detail page, per owner's explicit "both" decision. Nav: `G M`,
+    sidebar + command palette; deliberately dropped from the mobile bottom tab
+    bar (6 tabs was too cramped) — desktop/tablet only via sidebar there.
 - **Stage B (UX) shipped on top of tenancy.** (2026-07-13)
   - **User-defined offers**: `CampaignOffer` {key,label,matchSignal,offerText,angle,order};
     `Lead.category` = offer KEY (legacy "crm"/"website_proposal" preserved as seeded keys).
@@ -107,7 +154,6 @@ Format: one bullet per item, newest on top. Convert relative dates to absolute.
 
 ## Open / unresolved (see TODO.md for full list)
 
-- New-Campaign live "scouted leads preview" — needs SSE vs polling decision before build.
 - Inbox lead-context side panel — blocked on a signals backend (NLP pass over inbound).
 - Composer calendar-link / signature buttons — blocked on where calendar links come from
   + a `signature` field (Settings/User).

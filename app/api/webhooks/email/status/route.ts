@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { sendTelegramMessage, escapeHtml } from "@/lib/telegram";
+import { logError } from "@/lib/activity";
 
 const EVENT_TO_STATUS: Record<string, string> = {
   "email.sent": "sent",
@@ -91,6 +92,16 @@ export async function POST(req: NextRequest) {
         where: { leadId: lead.id, status: "pending" },
         data: { status: "cancelled" },
       });
+
+      if (newStatus === "complained") {
+        // A spam complaint is a sender-reputation event, not just a lost lead.
+        await logError(
+          lead.orgId,
+          `${lead.companyName} marked your email as spam — review your opener copy and volume`,
+          "/leads",
+          `complaint:${lead.id}`,
+        );
+      }
 
       // Notify the org that owns the lead — never another tenant's chat.
       const settings = lead.orgId
