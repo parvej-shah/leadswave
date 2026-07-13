@@ -1,7 +1,7 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, CircleMarker, Circle, Popup, useMap } from "react-leaflet";
 import type { LatLngBoundsExpression, Map as LeafletMap } from "leaflet";
 import Link from "next/link";
@@ -46,12 +46,24 @@ const HOT_STATES = new Set(["replied", "converted", "meeting_booked"]);
 const CONTACTED_STATES = new Set(["contacted"]);
 const DEAD_STATES = new Set(["bounced", "unsubscribed", "cold"]);
 
+// Leaflet paints Circle/CircleMarker to a <canvas>; canvas fillStyle/strokeStyle
+// cannot resolve `var(--…)` and silently no-ops (invisible shapes). These are the
+// same oklch tokens from globals.css, inlined so the canvas renderer can paint them.
+const MAP_COLORS = {
+  discovered: "#7db3d8", // soft cyan-blue — reads clearly on the dark basemap (was near-black grey)
+  contacted: "#ff9b00", // --amber
+  hot: "#ff5f5b", // --hot
+  meeting: "#488bfb", // --info
+  dead: "#4a4a52", // muted slate for bounced/cold
+  success: "#4cc157", // --success
+} as const;
+
 function stateColor(state: string): string {
-  if (state === "meeting_booked") return "var(--info)";
-  if (HOT_STATES.has(state)) return "var(--hot)";
-  if (CONTACTED_STATES.has(state)) return "var(--amber)";
-  if (DEAD_STATES.has(state)) return "var(--fg-5)";
-  return "var(--fg-4)"; // discovered
+  if (state === "meeting_booked") return MAP_COLORS.meeting;
+  if (HOT_STATES.has(state)) return MAP_COLORS.hot;
+  if (CONTACTED_STATES.has(state)) return MAP_COLORS.contacted;
+  if (DEAD_STATES.has(state)) return MAP_COLORS.dead;
+  return MAP_COLORS.discovered; // discovered
 }
 
 const STATE_LABEL: Record<string, string> = {
@@ -65,15 +77,18 @@ const STATE_LABEL: Record<string, string> = {
   cold: "Cold",
 };
 
-/** Fits the map to lead/area bounds once data loads. */
+/** Fits the map to lead/area bounds whenever the data set changes. */
 function FitBounds({ bounds }: { bounds: LatLngBoundsExpression | null }) {
   const map = useMap();
-  const applied = useRef(false);
   useEffect(() => {
-    if (bounds && !applied.current) {
-      applied.current = true;
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 12 });
-    }
+    if (!bounds) return;
+    // Defer one frame so the container has its final size (dynamic import + flex
+    // layout can leave the map 0×0 on the first paint, which makes fitBounds no-op).
+    const id = requestAnimationFrame(() => {
+      map.invalidateSize();
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
+    });
+    return () => cancelAnimationFrame(id);
   }, [bounds, map]);
   return null;
 }
@@ -85,14 +100,23 @@ function HeatLayer({ points }: { points: [number, number, number][] }) {
     let layer: import("leaflet").Layer | null = null;
     let cancelled = false;
     (async () => {
-      const L = await import("leaflet");
+      // leaflet.heat augments the leaflet global as an import side effect. Under
+      // the bundler the ESM namespace isn't the object it patches, so expose the
+      // real instance on window.L *before* loading the plugin, then read from it.
+      const mod = await import("leaflet");
+      const L = (mod.default ?? mod) as typeof import("leaflet") & {
+        heatLayer: (points: [number, number, number][], opts?: unknown) => import("leaflet").Layer;
+      };
+      (window as unknown as { L: unknown }).L = L;
       await import("leaflet.heat");
-      if (cancelled || points.length === 0) return;
+      if (cancelled || points.length === 0 || typeof L.heatLayer !== "function") return;
       layer = L.heatLayer(points, {
-        radius: 22,
-        blur: 26,
+        radius: 18,
+        blur: 24,
+        minOpacity: 0.35,
         maxZoom: 12,
-        gradient: { 0.2: "#3a6b8a", 0.4: "#4fa3c9", 0.6: "#e8b34a", 0.8: "#e86f4a", 1.0: "#e83d3d" },
+        // Cool → warm density ramp: sparse areas glow teal, hotspots burn amber/red.
+        gradient: { 0.15: "#1e5f8a", 0.35: "#2b8fc4", 0.55: "#37c0c9", 0.75: "#f0b429", 1.0: "#f04a3d" },
       });
       layer.addTo(map);
     })();
@@ -264,8 +288,8 @@ export function CoverageMap({
               radius={area.radiusM}
               pathOptions={
                 area.leadCount > 0
-                  ? { color: "var(--success)", fillColor: "var(--success)", fillOpacity: 0.06, weight: 1.5 }
-                  : { color: "var(--fg-5)", fillColor: "transparent", fillOpacity: 0, weight: 1.5, dashArray: "5 5" }
+                  ? { color: MAP_COLORS.success, fillColor: MAP_COLORS.success, fillOpacity: 0.08, weight: 1.5 }
+                  : { color: MAP_COLORS.dead, fillColor: "transparent", fillOpacity: 0, weight: 1.5, dashArray: "5 5" }
               }
             >
               <Popup>
@@ -286,10 +310,10 @@ export function CoverageMap({
         {/* Legend */}
         {!loading && (
           <div className="absolute bottom-3 left-3 z-[400] bg-[oklch(0.11_0_0)]/90 backdrop-blur border border-border rounded-lg px-3 py-2.5 flex flex-col gap-1.5 font-mono text-[10px] text-fg-4">
-            <LegendRow color="var(--fg-4)" label="Discovered" />
-            <LegendRow color="var(--amber)" label="Contacted" />
-            <LegendRow color="var(--hot)" label="Replied" />
-            <LegendRow color="var(--info)" label="Meeting booked" />
+            <LegendRow color={MAP_COLORS.discovered} label="Discovered" />
+            <LegendRow color={MAP_COLORS.contacted} label="Contacted" />
+            <LegendRow color={MAP_COLORS.hot} label="Replied" />
+            <LegendRow color={MAP_COLORS.meeting} label="Meeting booked" />
             <div className="w-full h-px bg-border-soft my-0.5" />
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full border border-success" style={{ background: "color-mix(in oklch, var(--success) 15%, transparent)" }} />
@@ -315,7 +339,10 @@ function LegendRow({ color, label }: { color: string; label: string }) {
   );
 }
 
-/** Only render individual pins above zoom 11 — otherwise heat + areas carry the view. */
+/**
+ * Render individual pins from zoom 7 up — small dots when zoomed out, full-size
+ * up close. Below 7, heat + area circles carry the view (avoids marker soup).
+ */
 function ZoomGatedMarkers({ leads }: { leads: CoverageLead[] }) {
   const map = useMap();
   const [zoom, setZoom] = useState(map.getZoom());
@@ -328,34 +355,54 @@ function ZoomGatedMarkers({ leads }: { leads: CoverageLead[] }) {
     };
   }, [map]);
 
-  if (zoom < 11) return null;
+  if (zoom < 7) return null;
+
+  const close = zoom >= 11;
+  const core = close ? 4.5 : 3;
+  const halo = close ? 9 : 6;
 
   return (
     <>
-      {leads.map((lead) => (
-        <CircleMarker
-          key={lead.id}
-          center={[lead.lat, lead.lng]}
-          radius={5}
-          pathOptions={{
-            color: stateColor(lead.state),
-            fillColor: stateColor(lead.state),
-            fillOpacity: 0.85,
-            weight: 1.5,
-          }}
-        >
-          <Popup>
-            <div className="font-mono text-[12px] flex flex-col gap-0.5">
-              <strong>{lead.companyName}</strong>
-              <span className="text-fg-4">{STATE_LABEL[lead.state] ?? lead.state}</span>
-              {lead.category && <span className="text-fg-4">{lead.category}</span>}
-              <Link href={`/leads?highlight=${lead.id}`} className="text-amber mt-1 inline-block">
-                View lead →
-              </Link>
-            </div>
-          </Popup>
-        </CircleMarker>
-      ))}
+      {leads.map((lead) => {
+        const color = stateColor(lead.state);
+        return (
+          <Fragment key={lead.id}>
+            {/* Soft glow so the pin reads on the dark basemap */}
+            <CircleMarker
+              center={[lead.lat, lead.lng]}
+              radius={halo}
+              pathOptions={{
+                stroke: false,
+                fillColor: color,
+                fillOpacity: 0.18,
+                interactive: false,
+              }}
+            />
+            {/* Crisp core with a dark rim for contrast */}
+            <CircleMarker
+              center={[lead.lat, lead.lng]}
+              radius={core}
+              pathOptions={{
+                color: "#0b0b0d",
+                weight: 1,
+                fillColor: color,
+                fillOpacity: 1,
+              }}
+            >
+              <Popup>
+                <div className="font-mono text-[12px] flex flex-col gap-0.5">
+                  <strong>{lead.companyName}</strong>
+                  <span className="text-fg-4">{STATE_LABEL[lead.state] ?? lead.state}</span>
+                  {lead.category && <span className="text-fg-4">{lead.category}</span>}
+                  <Link href={`/leads?highlight=${lead.id}`} className="text-amber mt-1 inline-block">
+                    View lead →
+                  </Link>
+                </div>
+              </Popup>
+            </CircleMarker>
+          </Fragment>
+        );
+      })}
     </>
   );
 }
