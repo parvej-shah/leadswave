@@ -149,7 +149,7 @@ export async function GET(req: NextRequest) {
     areas,
     filters: {
       businessTypes, // { id, name }[]
-      campaigns: allCampaigns.map((c) => ({ id: c.id, name: c.name })),
+      campaigns: allCampaigns.map((c) => ({ id: c.id, name: c.name, businessTypeId: c.businessTypeId })),
     },
     stats: {
       leadsMapped: leads.length,

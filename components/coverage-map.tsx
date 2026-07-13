@@ -32,7 +32,10 @@ type CoverageArea = {
 type CoverageResponse = {
   leads: CoverageLead[];
   areas: CoverageArea[];
-  filters: { businessTypes: { id: string; name: string }[]; campaigns: { id: string; name: string }[] };
+  filters: {
+    businessTypes: { id: string; name: string }[];
+    campaigns: { id: string; name: string; businessTypeId: string | null }[];
+  };
   stats: {
     leadsMapped: number;
     contactedPct: number;
@@ -156,6 +159,21 @@ export function CoverageMap({
       .finally(() => setLoading(false));
   }, [campaignId, campaignFilter, businessType, compact]);
 
+  // Campaign dropdown lists only the selected type's campaigns (all when "all").
+  const visibleCampaigns = useMemo(() => {
+    const all = data?.filters.campaigns ?? [];
+    if (businessType === "all") return all;
+    return all.filter((c) => c.businessTypeId === businessType);
+  }, [data, businessType]);
+
+  // If the picked type no longer contains the selected campaign, drop back to "all".
+  useEffect(() => {
+    if (campaignFilter === "all") return;
+    if (!visibleCampaigns.some((c) => c.id === campaignFilter)) {
+      setCampaignFilter("all");
+    }
+  }, [visibleCampaigns, campaignFilter]);
+
   const filteredLeads = useMemo(() => {
     if (!data) return [];
     if (stateFilter === "all") return data.leads;
@@ -214,7 +232,7 @@ export function CoverageMap({
             className="bg-[oklch(0.13_0_0)] border border-border rounded-md px-2.5 py-1.5 font-mono text-[11px] text-fg-2 outline-none focus:border-amber-border transition-colors"
           >
             <option value="all">All campaigns</option>
-            {data?.filters.campaigns.map((c) => (
+            {visibleCampaigns.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
