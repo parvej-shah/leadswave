@@ -109,3 +109,43 @@ export const FIELD_ALIASES: Record<string, CanonicalField> = {
 export function autoMapHeader(header: string): CanonicalField {
   return FIELD_ALIASES[header.toLowerCase().trim()] ?? "skip";
 }
+
+export type MappedLead = {
+  companyName: string;
+  email: string;
+  website: string;
+  description: string;
+};
+
+/**
+ * Zero-configuration mapping: auto-resolve every header to a canonical field.
+ * Headers that don't match a known alias are NOT dropped — their values are
+ * folded into `description` (prefixed with the header) so nothing is silently
+ * lost when mapping is hidden from the user. The user can still edit the result
+ * in the preview. This is the single source of truth shared by the client
+ * wizard and the API's fallback path.
+ */
+export function rowsToLeads(headers: string[], rows: CSVRow[]): MappedLead[] {
+  const mapping = headers.map((h) => [h, autoMapHeader(h)] as const);
+  const unmatched = mapping.filter(([, field]) => field === "skip").map(([h]) => h);
+
+  return rows.map((row) => {
+    const out: MappedLead = { companyName: "", email: "", website: "", description: "" };
+    for (const [h, field] of mapping) {
+      if (field === "skip") continue;
+      const val = (row[h] ?? "").trim();
+      if (val && !out[field]) out[field] = val;
+    }
+    // Fold any unmatched columns into description so their data survives.
+    const extras = unmatched
+      .map((h) => {
+        const val = (row[h] ?? "").trim();
+        return val ? `${h}: ${val}` : "";
+      })
+      .filter(Boolean);
+    if (extras.length) {
+      out.description = [out.description, ...extras].filter(Boolean).join(" · ");
+    }
+    return out;
+  });
+}

@@ -676,7 +676,7 @@ export function NewCampaignWizard() {
           {phase === "choose"
             ? "How do you want to add leads to this campaign?"
             : phase === "import"
-            ? "Upload a CSV, map the columns, then review and edit before importing."
+            ? "Upload a CSV — columns are matched automatically, then review and edit before importing."
             : phase === "cities"
             ? "Pick the cities to gather leads from."
             : phase === "areas"
@@ -833,18 +833,12 @@ export function NewCampaignWizard() {
 
       {/* ── IMPORT ── */}
       {phase === "import" && campaignId && (
-        <div className="flex flex-col gap-4">
-          <ImportWizard
-            campaignId={campaignId}
-            campaignName={name}
-            onDone={() => router.push(`/campaigns/${campaignId}`)}
-          />
-          <div>
-            <Button type="button" variant="ghost" onClick={() => setPhase("choose")}>
-              ← Back
-            </Button>
-          </div>
-        </div>
+        <ImportWizard
+          campaignId={campaignId}
+          campaignName={name}
+          onDone={() => router.push(`/campaigns/${campaignId}`)}
+          onExit={() => setPhase("choose")}
+        />
       )}
 
       {/* ── CITIES ── */}

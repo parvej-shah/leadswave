@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { db } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
-import { parseCSV, FIELD_ALIASES } from "@/lib/csv";
+import { parseCSV, rowsToLeads } from "@/lib/csv";
 
 type ImportLead = {
   companyName?: string;
@@ -11,32 +11,24 @@ type ImportLead = {
   description?: string;
 };
 
-// Turn parsed CSV rows into lead objects using an explicit column map, or fall
-// back to auto-resolving each header against the known aliases.
-function rowsToLeads(
-  rows: Record<string, string>[],
-  columnMap?: Record<string, string>
-): ImportLead[] {
-  if (rows.length === 0) return [];
-  const rawHeaders = Object.keys(rows[0]);
-  const effectiveMap: Record<string, string> =
-    columnMap ??
-    Object.fromEntries(
-      rawHeaders
-        .map((h) => [h, FIELD_ALIASES[h.toLowerCase().trim()]] as const)
-        .filter(([, field]) => field)
-    );
+// Existing (non-deleted) lead emails for a campaign — used by the import wizard
+// to flag duplicate rows in the preview before the user commits the import.
+export async function GET(req: NextRequest) {
+  let ctx;
+  try {
+    ctx = await requireOrg();
+  } catch (e) {
+    return tenantErrorResponse(e);
+  }
 
-  return rows.map((row) => {
-    const mapped: ImportLead = {};
-    for (const [csvCol, field] of Object.entries(effectiveMap)) {
-      // Rows are keyed by the original header casing; match case-insensitively.
-      const key = Object.keys(row).find((k) => k.toLowerCase().trim() === csvCol.toLowerCase().trim());
-      const val = key ? row[key] : undefined;
-      if (val) (mapped as Record<string, string>)[field] = val;
-    }
-    return mapped;
+  const campaignId = new URL(req.url).searchParams.get("campaignId");
+  if (!campaignId) return NextResponse.json({ error: "campaignId required" }, { status: 400 });
+
+  const existing = await db.lead.findMany({
+    where: { campaignId, orgId: ctx.orgId, deletedAt: null, email: { not: null } },
+    select: { email: true },
   });
+  return NextResponse.json({ emails: existing.map((e) => e.email!.toLowerCase()) });
 }
 
 export async function POST(req: NextRequest) {
@@ -48,10 +40,9 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { campaignId, csvText, columnMap, leads: editedLeads } = body as {
+  const { campaignId, csvText, leads: editedLeads } = body as {
     campaignId: string;
     csvText?: string;
-    columnMap?: Record<string, string>; // csvHeader -> canonical field
     leads?: ImportLead[]; // pre-edited rows from the preview (source of truth)
   };
 
@@ -68,9 +59,9 @@ export async function POST(req: NextRequest) {
     candidates = editedLeads;
   } else {
     if (!csvText?.trim()) return NextResponse.json({ error: "csvText or leads required" }, { status: 400 });
-    const { rows } = parseCSV(csvText);
+    const { headers, rows } = parseCSV(csvText);
     if (rows.length === 0) return NextResponse.json({ error: "No data rows found in CSV" }, { status: 400 });
-    candidates = rowsToLeads(rows, columnMap);
+    candidates = rowsToLeads(headers, rows);
   }
 
   // Normalise + require companyName or email.

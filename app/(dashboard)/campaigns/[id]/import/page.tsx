@@ -36,7 +36,7 @@ export default function ImportPage() {
 
       <h1 className="ds-h1 m-0 mb-0.5">Import Leads from CSV</h1>
       <p className="font-mono text-[12px] text-fg-4 m-0 mb-6">
-        Upload a spreadsheet, map the columns, then review and edit before importing.
+        Upload a spreadsheet — columns are matched automatically, then review and edit before importing.
       </p>
 
       <ImportWizard campaignId={campaignId} campaignName={campaignName} />
