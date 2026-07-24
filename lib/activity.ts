@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 
 export type ActivityType =
   | "scouted"
+  | "imported"
   | "opener_sent"
   | "followup_sent"
   | "followup_queued"

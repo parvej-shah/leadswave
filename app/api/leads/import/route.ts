@@ -1,92 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { db } from "@/lib/db";
+import { logActivity } from "@/lib/activity";
+import { parseCSV, FIELD_ALIASES } from "@/lib/csv";
 
-function parseCSV(text: string): Record<string, string>[] {
-  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-  const nonEmpty = lines.filter((l) => l.trim());
-  if (nonEmpty.length === 0) return [];
-  if (nonEmpty.length === 1) {
-    const values = parseCSVRow(nonEmpty[0]).map((v) => v.trim());
-    if (values.length < 2) return [];
-    const headers = ["company", "email", "website", "description"].slice(0, values.length);
-    const row: Record<string, string> = {};
-    headers.forEach((h, i) => {
-      row[h] = values[i] ?? "";
-    });
-    return [row];
-  }
-
-  const headers = parseCSVRow(nonEmpty[0]).map((h) => h.trim().toLowerCase());
-
-  return nonEmpty
-    .slice(1)
-    .map((line) => {
-      const values = parseCSVRow(line);
-      const row: Record<string, string> = {};
-      headers.forEach((h, i) => {
-        row[h] = (values[i] ?? "").trim();
-      });
-      return row;
-    })
-    .filter((row) => Object.values(row).some((v) => v));
-}
-
-function parseCSVRow(line: string): string[] {
-  const cells: string[] = [];
-  let cur = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        cur += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (ch === "," && !inQuotes) {
-      cells.push(cur);
-      cur = "";
-    } else {
-      cur += ch;
-    }
-  }
-  cells.push(cur);
-  return cells;
-}
-
-// Resolve common column name variations to canonical field names
-const FIELD_ALIASES: Record<string, string> = {
-  company: "companyName",
-  company_name: "companyName",
-  companyname: "companyName",
-  "company name": "companyName",
-  organization: "companyName",
-  name: "companyName",
-  business: "companyName",
-  email: "email",
-  "email address": "email",
-  email_address: "email",
-  mail: "email",
-  website: "website",
-  url: "website",
-  "website url": "website",
-  site: "website",
-  domain: "website",
-  description: "description",
-  notes: "description",
-  about: "description",
+type ImportLead = {
+  companyName?: string;
+  email?: string;
+  website?: string;
+  description?: string;
 };
 
-function resolveHeaders(rawHeaders: string[]): Record<string, string> {
-  const map: Record<string, string> = {};
-  for (const h of rawHeaders) {
-    const canonical = FIELD_ALIASES[h.toLowerCase().trim()];
-    if (canonical) map[h.toLowerCase().trim()] = canonical;
-  }
-  return map;
+// Turn parsed CSV rows into lead objects using an explicit column map, or fall
+// back to auto-resolving each header against the known aliases.
+function rowsToLeads(
+  rows: Record<string, string>[],
+  columnMap?: Record<string, string>
+): ImportLead[] {
+  if (rows.length === 0) return [];
+  const rawHeaders = Object.keys(rows[0]);
+  const effectiveMap: Record<string, string> =
+    columnMap ??
+    Object.fromEntries(
+      rawHeaders
+        .map((h) => [h, FIELD_ALIASES[h.toLowerCase().trim()]] as const)
+        .filter(([, field]) => field)
+    );
+
+  return rows.map((row) => {
+    const mapped: ImportLead = {};
+    for (const [csvCol, field] of Object.entries(effectiveMap)) {
+      // Rows are keyed by the original header casing; match case-insensitively.
+      const key = Object.keys(row).find((k) => k.toLowerCase().trim() === csvCol.toLowerCase().trim());
+      const val = key ? row[key] : undefined;
+      if (val) (mapped as Record<string, string>)[field] = val;
+    }
+    return mapped;
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -98,56 +48,92 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { campaignId, csvText, columnMap } = body as {
+  const { campaignId, csvText, columnMap, leads: editedLeads } = body as {
     campaignId: string;
-    csvText: string;
-    columnMap?: Record<string, string>; // user-supplied override: csvHeader -> field
+    csvText?: string;
+    columnMap?: Record<string, string>; // csvHeader -> canonical field
+    leads?: ImportLead[]; // pre-edited rows from the preview (source of truth)
   };
 
   if (!campaignId) return NextResponse.json({ error: "campaignId required" }, { status: 400 });
-  if (!csvText?.trim()) return NextResponse.json({ error: "csvText required" }, { status: 400 });
 
-  const campaign = await db.campaign.findFirst({ where: { id: campaignId, orgId: ctx.orgId, deletedAt: null } });
+  const campaign = await db.campaign.findFirst({
+    where: { id: campaignId, orgId: ctx.orgId, deletedAt: null },
+  });
   if (!campaign) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
 
-  const rows = parseCSV(csvText);
-  if (rows.length === 0) return NextResponse.json({ error: "No data rows found in CSV" }, { status: 400 });
+  // Source rows: prefer the edited preview rows; otherwise parse the CSV text.
+  let candidates: ImportLead[];
+  if (Array.isArray(editedLeads)) {
+    candidates = editedLeads;
+  } else {
+    if (!csvText?.trim()) return NextResponse.json({ error: "csvText or leads required" }, { status: 400 });
+    const { rows } = parseCSV(csvText);
+    if (rows.length === 0) return NextResponse.json({ error: "No data rows found in CSV" }, { status: 400 });
+    candidates = rowsToLeads(rows, columnMap);
+  }
 
-  const rawHeaders = Object.keys(rows[0]);
-  const autoMap = resolveHeaders(rawHeaders);
-  const effectiveMap = columnMap ?? autoMap;
-
-  const leads = rows
-    .map((row) => {
-      const mapped: Record<string, string> = {};
-      for (const [csvCol, field] of Object.entries(effectiveMap)) {
-        const val = row[csvCol.toLowerCase().trim()];
-        if (val) mapped[field] = val;
-      }
-      return mapped;
-    })
+  // Normalise + require companyName or email.
+  const normalized = candidates
+    .map((l) => ({
+      companyName: l.companyName?.trim() || "",
+      email: l.email?.trim() || "",
+      website: l.website?.trim() || "",
+      description: l.description?.trim() || "",
+    }))
     .filter((l) => l.companyName || l.email);
 
-  if (leads.length === 0) {
+  if (normalized.length === 0) {
     return NextResponse.json(
-      { error: "No usable rows found — ensure columns map to companyName and/or email" },
+      { error: "No usable rows found — ensure rows have a company name and/or email" },
       { status: 400 }
     );
   }
 
+  const total = normalized.length;
+
+  // Dedupe by email: imported leads have a null placeId, so the
+  // @@unique([campaignId, placeId]) constraint + skipDuplicates never fire for
+  // them. Drop rows whose email already exists in the campaign, and collapse
+  // duplicate emails within this batch.
+  const existing = await db.lead.findMany({
+    where: { campaignId, orgId: ctx.orgId, deletedAt: null, email: { not: null } },
+    select: { email: true },
+  });
+  const seen = new Set(existing.map((e) => e.email!.toLowerCase()));
+
+  const toInsert = normalized.filter((l) => {
+    if (!l.email) return true; // no email → nothing to dedupe against
+    const key = l.email.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  if (toInsert.length === 0) {
+    return NextResponse.json({ imported: 0, total });
+  }
+
   const result = await db.lead.createMany({
-    data: leads.map((l) => ({
+    data: toInsert.map((l) => ({
       campaignId,
       orgId: ctx.orgId,
-      companyName: l.companyName ?? l.email ?? "Unknown",
-      email: l.email ?? null,
+      companyName: l.companyName || l.email || "Unknown",
+      email: l.email || null,
       emailSource: l.email ? "imported" : null,
-      website: l.website ?? null,
-      description: l.description ?? null,
+      website: l.website || null,
+      description: l.description || null,
       state: "discovered",
     })),
     skipDuplicates: true,
   });
 
-  return NextResponse.json({ imported: result.count, total: leads.length });
+  await logActivity({
+    orgId: ctx.orgId,
+    type: "imported",
+    summary: `Imported ${result.count} lead${result.count === 1 ? "" : "s"} to ${campaign.name}`,
+    campaignId,
+  });
+
+  return NextResponse.json({ imported: result.count, total });
 }

@@ -558,6 +558,7 @@ const EVENT_DOT: Record<string, string> = {
   suppressed: "var(--hot)",
   reply_cold: "var(--fg-5)",
   scouted: "var(--success)",
+  imported: "var(--success)",
   error: "var(--hot)",
 };
 

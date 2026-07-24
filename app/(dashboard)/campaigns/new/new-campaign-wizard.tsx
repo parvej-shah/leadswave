@@ -6,19 +6,30 @@ import { useRouter } from "next/navigation";
 import { Button, Input, Select, Textarea, Toast, CategoryBadge, Icon } from "@/components/ui";
 import { OffersEditor, DEFAULT_OFFERS, type OfferDraft } from "@/components/offers-editor";
 import { MapsLead } from "@/agents/scout/maps-graph";
+import { ImportWizard } from "@/app/(dashboard)/campaigns/[id]/import/import-wizard";
 
 type SuggestedCity = { city: string; reason: string; score: number };
 type SuggestedArea = { area: string; reason: string; score: number };
 type CityAreas = { city: string; areas: SuggestedArea[] };
 
-type Phase = "details" | "cities" | "areas" | "running" | "review" | "done";
+type LeadMethod = "scout" | "import";
+type Phase = "details" | "choose" | "import" | "cities" | "areas" | "running" | "review" | "done";
 
-const STEPS = [
+type StepDef = { key: string; label: string };
+
+const SCOUT_STEPS: StepDef[] = [
   { key: "details", label: "Details" },
+  { key: "choose", label: "Method" },
   { key: "cities", label: "Cities" },
   { key: "areas", label: "Areas" },
   { key: "review", label: "Review Leads" },
-] as const;
+];
+
+const IMPORT_STEPS: StepDef[] = [
+  { key: "details", label: "Details" },
+  { key: "choose", label: "Method" },
+  { key: "import", label: "Import CSV" },
+];
 
 // Each phase: [label, targetPercent, durationMs]
 const RUNNING_PHASES: [string, number, number][] = [
@@ -139,11 +150,15 @@ function RunningIndicator() {
   );
 }
 
-function StepIndicator({ phase }: { phase: Phase }) {
-  const activeIdx = phase === "details" ? 0 : phase === "cities" ? 1 : phase === "areas" ? 2 : 3;
+function StepIndicator({ phase, method }: { phase: Phase; method: LeadMethod | null }) {
+  const steps = method === "import" ? IMPORT_STEPS : SCOUT_STEPS;
+  // "running" sits on the "review" step; unknown phases fall back to 0.
+  const phaseKey = phase === "running" ? "review" : phase;
+  const idxByKey = steps.findIndex((s) => s.key === phaseKey);
+  const activeIdx = idxByKey === -1 ? 0 : idxByKey;
   return (
     <div className="flex items-center gap-0 mb-4 overflow-x-auto">
-      {STEPS.map((step, i) => {
+      {steps.map((step, i) => {
         const done = i < activeIdx || phase === "done";
         const active = i === activeIdx && phase !== "running" && phase !== "done";
         return (
@@ -170,7 +185,7 @@ function StepIndicator({ phase }: { phase: Phase }) {
                 {step.label}
               </span>
             </div>
-            {i < STEPS.length - 1 && (
+            {i < steps.length - 1 && (
               <div
                 className={[
                   "w-8 h-px mx-3 transition-colors duration-200",
@@ -282,6 +297,8 @@ export function NewCampaignWizard() {
   const router = useRouter();
 
   const [phase, setPhase] = useState<Phase>("details");
+  const [method, setMethod] = useState<LeadMethod | null>(null);
+  const [creatingCampaign, setCreatingCampaign] = useState(false);
   const [name, setName] = useState("");
   const [businessType, setBusinessType] = useState("");
   const [knownTypes, setKnownTypes] = useState<string[]>([]);
@@ -380,6 +397,62 @@ export function NewCampaignWizard() {
       }
     } finally {
       setGeneratingOffer(null);
+    }
+  }
+
+  function validateDetails(): boolean {
+    if (!name.trim() || !businessType.trim() || !country.trim()) {
+      setError("Name, business type, and country are required.");
+      return false;
+    }
+    setError("");
+    return true;
+  }
+
+  function goToChoose() {
+    if (!validateDetails()) return;
+    setPhase("choose");
+  }
+
+  // Create the campaign from the Details fields (no cities/areas needed — the
+  // API resolves location from `country`). Shared by the scout launch and the
+  // import branch.
+  async function createCampaign(extra: {
+    selectedCities?: string[];
+    selectedAreas?: Record<string, string[]>;
+  }): Promise<{ id: string } | null> {
+    const res = await fetch("/api/campaigns", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        businessType,
+        country,
+        scoutDepth,
+        selectedCities: extra.selectedCities ?? [],
+        selectedAreas: extra.selectedAreas ?? {},
+        offers: offers.filter((o) => o.label.trim() && o.offerText.trim()),
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Failed to create campaign");
+      return null;
+    }
+    return res.json();
+  }
+
+  async function startImport() {
+    if (!validateDetails()) return;
+    setError("");
+    setCreatingCampaign(true);
+    try {
+      const campaign = await createCampaign({});
+      if (!campaign) return;
+      setCampaignId(campaign.id);
+      setPhase("import");
+    } finally {
+      setCreatingCampaign(false);
     }
   }
 
@@ -517,18 +590,11 @@ export function NewCampaignWizard() {
 
     try {
       // Create campaign
-      const createRes = await fetch("/api/campaigns", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, businessType, country, scoutDepth, selectedCities: cities, selectedAreas: areasPayload, offers: offers.filter((o) => o.label.trim() && o.offerText.trim()) }),
-      });
-      if (!createRes.ok) {
-        const data = await createRes.json();
-        setError(data.error ?? "Failed to create campaign");
+      const campaign = await createCampaign({ selectedCities: cities, selectedAreas: areasPayload });
+      if (!campaign) {
         setPhase("areas");
         return;
       }
-      const campaign = await createRes.json();
       setCampaignId(campaign.id);
 
       // Run preview (no save)
@@ -607,7 +673,11 @@ export function NewCampaignWizard() {
       <div className="mb-3">
         <h1 className="ds-h1 m-0 mb-0.5">New Campaign</h1>
         <p className="font-mono text-[12px] text-fg-4 m-0">
-          {phase === "cities"
+          {phase === "choose"
+            ? "How do you want to add leads to this campaign?"
+            : phase === "import"
+            ? "Upload a CSV, map the columns, then review and edit before importing."
+            : phase === "cities"
             ? "Pick the cities to gather leads from."
             : phase === "areas"
             ? "Pick hotspot areas per city — cities with no areas selected are searched city-wide."
@@ -618,7 +688,7 @@ export function NewCampaignWizard() {
       </div>
 
       {/* Step indicator */}
-      {phase !== "running" && <StepIndicator phase={phase} />}
+      {phase !== "running" && <StepIndicator phase={phase} method={method} />}
 
       {/* ── DETAILS ── */}
       {phase === "details" && (
@@ -679,14 +749,99 @@ export function NewCampaignWizard() {
             <Link href="/campaigns">
               <Button type="button" variant="ghost">Cancel</Button>
             </Link>
-            <Button
-              type="button"
-              size="lg"
-              onClick={findCities}
-              disabled={loadingCities}
-              iconStart={loadingCities ? "refresh" : "sparkle"}
-            >
-              {loadingCities ? "finding cities…" : "Find Cities"}
+            <Button type="button" size="lg" onClick={goToChoose} iconStart="arrow">
+              Continue
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── CHOOSE METHOD ── */}
+      {phase === "choose" && (
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {(
+              [
+                {
+                  key: "scout" as const,
+                  icon: "search" as const,
+                  title: "Scout for leads",
+                  desc: "Let the AI discover businesses on Google Maps across the cities you pick, then review before saving.",
+                },
+                {
+                  key: "import" as const,
+                  icon: "upload" as const,
+                  title: "Import from CSV",
+                  desc: "Upload your own spreadsheet of leads, map the columns, and edit rows before importing.",
+                },
+              ]
+            ).map((opt) => {
+              const active = method === opt.key;
+              return (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setMethod(opt.key)}
+                  className={[
+                    "text-left rounded-xl border px-4 py-4 transition-colors duration-150 cursor-pointer flex flex-col gap-2",
+                    active
+                      ? "bg-amber-bg border-amber-border"
+                      : "bg-[oklch(0.12_0_0)] border-[oklch(0.19_0_0)] hover:border-[oklch(0.26_0_0)]",
+                  ].join(" ")}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span
+                      className={[
+                        "w-8 h-8 rounded-lg border flex items-center justify-center shrink-0",
+                        active ? "bg-amber border-amber text-canvas" : "border-[oklch(0.26_0_0)] text-fg-3",
+                      ].join(" ")}
+                    >
+                      <Icon name={opt.icon} size={16} />
+                    </span>
+                    <span className="font-mono text-[14px] text-fg-1 font-medium">{opt.title}</span>
+                  </div>
+                  <p className="font-mono text-[11px] text-fg-4 m-0 leading-[1.5]">{opt.desc}</p>
+                </button>
+              );
+            })}
+          </div>
+
+          {error && <Toast kind="hot" pill="ERROR">{error}</Toast>}
+
+          <div className="flex justify-between items-center mt-2">
+            <Button type="button" variant="ghost" onClick={() => setPhase("details")}>
+              ← Back
+            </Button>
+            {method === "import" ? (
+              <Button type="button" size="lg" onClick={startImport} disabled={creatingCampaign} iconStart="upload">
+                {creatingCampaign ? "Creating…" : "Continue to Import"}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="lg"
+                onClick={findCities}
+                disabled={!method || loadingCities}
+                iconStart={loadingCities ? "refresh" : "sparkle"}
+              >
+                {loadingCities ? "finding cities…" : "Find Cities"}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── IMPORT ── */}
+      {phase === "import" && campaignId && (
+        <div className="flex flex-col gap-4">
+          <ImportWizard
+            campaignId={campaignId}
+            campaignName={name}
+            onDone={() => router.push(`/campaigns/${campaignId}`)}
+          />
+          <div>
+            <Button type="button" variant="ghost" onClick={() => setPhase("choose")}>
+              ← Back
             </Button>
           </div>
         </div>
@@ -759,7 +914,7 @@ export function NewCampaignWizard() {
           {error && <Toast kind="hot" pill="ERROR">{error}</Toast>}
 
           <div className="flex justify-between items-center mt-2">
-            <Button type="button" variant="ghost" onClick={() => setPhase("details")}>
+            <Button type="button" variant="ghost" onClick={() => setPhase("choose")}>
               ← Back
             </Button>
             <Button
