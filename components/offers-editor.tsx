@@ -18,6 +18,11 @@ export const DEFAULT_OFFERS: OfferDraft[] = [
 const SIGNAL_LABEL: Record<string, string> = {
   no_website: "Business has NO website",
   has_website: "Business HAS a website",
+  no_phone: "Business has NO phone number",
+  has_phone: "Business HAS a phone number",
+  low_rating: "Rating below 4.0 stars",
+  no_rating: "No rating listed",
+  no_maps_listing: "No Google Maps listing",
   always: "Any lead (fallback)",
 };
 

@@ -4,6 +4,7 @@ import { logActivity } from "@/lib/activity";
 import { sendTelegramMessage, notifyAiFailure, escapeHtml } from "@/lib/telegram";
 import { InboxState } from "../graph";
 import { stripSignature } from "@/lib/html/plain";
+import { resolveOffer } from "../../outreach/lib/offer";
 
 export async function warmNode(state: InboxState): Promise<Partial<InboxState>> {
   await logActivity({
@@ -11,6 +12,7 @@ export async function warmNode(state: InboxState): Promise<Partial<InboxState>> 
     type: "reply_warm",
     leadId: state.leadId,
     summary: `Classified reply from ${state.lead.companyName} as warm`,
+    meta: state.signals ? { signals: state.signals } : undefined,
   });
 
   await db.lead.update({
@@ -23,6 +25,8 @@ export async function warmNode(state: InboxState): Promise<Partial<InboxState>> 
     data: { status: "cancelled" },
   });
 
+  const { offer, angle } = resolveOffer(state.lead.category, state.campaign);
+
   const thread = state.priorMessages
     .map((m) => `[${m.direction.toUpperCase()}] ${stripSignature(m.body)}`)
     .join("\n\n---\n\n");
@@ -33,8 +37,8 @@ Use correct grammar, spelling, and punctuation throughout.
 Return ONLY the email body text — no subject, no greeting/sign-off needed.
 
 Company: ${state.lead.companyName}
-Our offer: ${state.campaign.offerText}
-
+Our specific offer for them: ${offer}
+${angle ? `Angle / Context (background context for tone): ${angle}\n` : ""}
 Thread so far:
 ${thread}
 

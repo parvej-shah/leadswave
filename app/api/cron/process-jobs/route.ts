@@ -283,6 +283,42 @@ export async function POST(req: NextRequest) {
       ];
       await sendTelegramMessage(settings.telegramChatId, lines.join("\n")).catch(() => {});
     }
+
+    // Auto-pause evaluation for active campaigns in this org (Phase 2-B)
+    const activeCampaigns = await db.campaign.findMany({
+      where: { orgId, status: "active", autoPauseEnabled: true, deletedAt: null },
+      select: { id: true, name: true },
+    });
+
+    for (const campaign of activeCampaigns) {
+      const totalSent = await db.message.count({
+        where: { lead: { campaignId: campaign.id, orgId }, direction: "outbound" },
+      });
+      if (totalSent >= 50) {
+        const totalReplied = await db.message.count({
+          where: { lead: { campaignId: campaign.id, orgId }, direction: "inbound" },
+        });
+        const replyRate = totalReplied / totalSent;
+        if (replyRate < 0.02) {
+          await db.campaign.update({
+            where: { id: campaign.id },
+            data: { status: "paused" },
+          });
+          await logActivity({
+            orgId,
+            type: "low_engagement",
+            campaignId: campaign.id,
+            summary: `Campaign "${campaign.name}" auto-paused — ${totalSent} sends, ${totalReplied} replies (<2%)`,
+          });
+          if (settings.telegramChatId) {
+            await sendTelegramMessage(
+              settings.telegramChatId,
+              `⏸️ <b>Campaign auto-paused:</b> ${campaign.name}\n${totalSent} sends, ${totalReplied} replies — engagement fell below 2% threshold.`,
+            ).catch(() => {});
+          }
+        }
+      }
+    }
   }
 
   return NextResponse.json({ ok: true, processed, failed, total: jobs.length });

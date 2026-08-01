@@ -35,7 +35,9 @@ export function parseCSVRow(line: string): string[] {
  * column order so a quick paste of one row still works.
  */
 export function parseCSV(text: string): { headers: string[]; rows: CSVRow[] } {
-  const lines = text
+  // Strip UTF-8 BOM if present
+  const clean = text.replace(/^\uFEFF/, "");
+  const lines = clean
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
     .split("\n")
@@ -70,8 +72,35 @@ export function parseCSV(text: string): { headers: string[]; rows: CSVRow[] } {
   return { headers, rows };
 }
 
+/**
+ * Parse an Excel (.xlsx / .xls) ArrayBuffer using SheetJS.
+ * Returns all non-empty sheets parsed into headers + rows.
+ * Dynamic import ensures SheetJS is only bundled client-side.
+ */
+export async function parseXLSX(
+  buffer: ArrayBuffer,
+): Promise<{ sheets: string[]; data: Record<string, { headers: string[]; rows: CSVRow[] }> }> {
+  const XLSX = await import("xlsx");
+  const wb = XLSX.read(buffer, { type: "array", cellText: true, cellDates: false });
+
+  const sheets: string[] = [];
+  const data: Record<string, { headers: string[]; rows: CSVRow[] }> = {};
+
+  for (const sheetName of wb.SheetNames) {
+    const ws = wb.Sheets[sheetName];
+    const csv = XLSX.utils.sheet_to_csv(ws, { blankrows: false });
+    const parsed = parseCSV(csv);
+    if (parsed.headers.length > 0 && parsed.rows.length > 0) {
+      sheets.push(sheetName);
+      data[sheetName] = parsed;
+    }
+  }
+
+  return { sheets, data };
+}
+
 // Canonical lead fields an imported column can map to.
-export const CANONICAL_FIELDS = ["companyName", "email", "website", "description", "skip"] as const;
+export const CANONICAL_FIELDS = ["companyName", "email", "website", "description", "phone", "address", "skip"] as const;
 export type CanonicalField = (typeof CANONICAL_FIELDS)[number];
 
 export const FIELD_LABELS: Record<CanonicalField, string> = {
@@ -79,11 +108,14 @@ export const FIELD_LABELS: Record<CanonicalField, string> = {
   email: "Email",
   website: "Website",
   description: "Description",
+  phone: "Phone",
+  address: "Address",
   skip: "— skip —",
 };
 
 // Resolve common column-name variations to canonical field names.
 export const FIELD_ALIASES: Record<string, CanonicalField> = {
+  // Company
   company: "companyName",
   company_name: "companyName",
   companyname: "companyName",
@@ -91,18 +123,50 @@ export const FIELD_ALIASES: Record<string, CanonicalField> = {
   organization: "companyName",
   name: "companyName",
   business: "companyName",
+  "business name": "companyName",
+  // Email
   email: "email",
   "email address": "email",
   email_address: "email",
+  "primary email": "email",
+  "work email": "email",
   mail: "email",
+  // Website
   website: "website",
   url: "website",
   "website url": "website",
   site: "website",
   domain: "website",
+  // Phone
+  phone: "phone",
+  "phone number": "phone",
+  phone_number: "phone",
+  phonenumber: "phone",
+  "work phone": "phone",
+  "mobile phone": "phone",
+  mobile: "phone",
+  cell: "phone",
+  tel: "phone",
+  telephone: "phone",
+  "contact number": "phone",
+  // Address / Location
+  address: "address",
+  addr: "address",
+  location: "address",
+  city: "address",
+  street: "address",
+  state: "address",
+  zip: "address",
+  "zip code": "address",
+  region: "address",
+  area: "address",
+  "city/state": "address",
+  // Description
   description: "description",
   notes: "description",
   about: "description",
+  details: "description",
+  summary: "description",
 };
 
 /** Auto-map a raw header to a canonical field (falls back to "skip"). */
@@ -115,6 +179,8 @@ export type MappedLead = {
   email: string;
   website: string;
   description: string;
+  phone: string;
+  address: string;
 };
 
 /**
@@ -125,12 +191,16 @@ export type MappedLead = {
  * in the preview. This is the single source of truth shared by the client
  * wizard and the API's fallback path.
  */
-export function rowsToLeads(headers: string[], rows: CSVRow[]): MappedLead[] {
-  const mapping = headers.map((h) => [h, autoMapHeader(h)] as const);
+export function rowsToLeads(
+  headers: string[],
+  rows: CSVRow[],
+  overrideMapping: Record<string, CanonicalField> = {}
+): MappedLead[] {
+  const mapping = headers.map((h) => [h, overrideMapping[h] ?? autoMapHeader(h)] as const);
   const unmatched = mapping.filter(([, field]) => field === "skip").map(([h]) => h);
 
   return rows.map((row) => {
-    const out: MappedLead = { companyName: "", email: "", website: "", description: "" };
+    const out: MappedLead = { companyName: "", email: "", website: "", description: "", phone: "", address: "" };
     for (const [h, field] of mapping) {
       if (field === "skip") continue;
       const val = (row[h] ?? "").trim();

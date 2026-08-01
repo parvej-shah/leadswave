@@ -98,12 +98,27 @@ function varietyBlock(seed: string): string {
 ${BANNED_PHRASES.map((p) => `  · ${p}`).join("\n")}`;
 }
 
+export function parseAngle(raw: string | null | undefined): string {
+  if (!raw) return "";
+  try {
+    const parsed = JSON.parse(raw) as { pain?: string; hook?: string; avoid?: string };
+    const parts: string[] = [];
+    if (parsed.pain) parts.push(`Pain to address: ${parsed.pain}`);
+    if (parsed.hook) parts.push(`Hook / observation angle: ${parsed.hook}`);
+    if (parsed.avoid) parts.push(`Things to avoid mentioning: ${parsed.avoid}`);
+    return parts.length > 0 ? parts.join("\n") : raw;
+  } catch {
+    return raw;
+  }
+}
+
 function contextBlock(ctx: OpenerContext): string {
+  const formattedAngle = parseAngle(ctx.angle);
   return [
     `About the recipient business:`,
     ctx.websiteSummary?.trim() || `Company: ${ctx.companyName}`,
     ctx.location ? `Location: ${ctx.location}` : "",
-    ctx.angle ? `\nFraming: ${ctx.angle}` : "",
+    formattedAngle ? `\nFraming / Angle:\n${formattedAngle}` : "",
     ctx.offer?.trim() ? `\nWhat we help with (for your reference only — do not paste this in): ${ctx.offer.trim()}` : "",
   ]
     .filter(Boolean)

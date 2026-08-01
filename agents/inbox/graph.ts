@@ -22,6 +22,7 @@ type Lead = {
   companyName: string;
   email: string | null;
   state: string;
+  category?: string | null;
 };
 
 type Message = {
@@ -31,10 +32,23 @@ type Message = {
   body: string;
 };
 
+import type { CampaignOfferLike } from "../outreach/lib/offer";
+
 type Campaign = {
   id: string;
   name: string;
   offerText: string;
+  websiteOffer?: string | null;
+  crmOffer?: string | null;
+  offers?: CampaignOfferLike[] | null;
+};
+
+export type LeadSignals = {
+  budget_mentioned?: boolean;
+  timeline_mentioned?: string | null;
+  competitor_mentioned?: string | null;
+  objection?: string | null;
+  contact_name?: string | null;
 };
 
 const InboxAnnotation = Annotation.Root({
@@ -52,6 +66,10 @@ const InboxAnnotation = Annotation.Root({
   classification: Annotation<Classification, Classification>({
     value: (_prev, next) => next,
     default: () => "cold" as Classification,
+  }),
+  signals: Annotation<LeadSignals, LeadSignals>({
+    value: (_prev, next) => next,
+    default: () => ({}),
   }),
   draftReply: Annotation<string | null, string | null>({
     value: (_prev, next) => next,

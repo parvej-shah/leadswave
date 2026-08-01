@@ -1,6 +1,6 @@
 import { generateText } from "@/lib/gemini";
 import { CLASSIFY_EXAMPLES } from "@/lib/ai/training/inbox-examples";
-import { InboxState, Classification } from "../graph";
+import { InboxState, Classification, LeadSignals } from "../graph";
 import { stripSignature } from "@/lib/html/plain";
 
 function buildFewShotExamples(): string {
@@ -23,6 +23,13 @@ Key rules:
 - If they say "maybe" or "not sure yet" → WARM, not HOT
 - If they ask to unsubscribe or say stop → COLD, never WARM
 - Auto-replies with "out of office" → OOO even if they say they'll get back to you
+
+Also extract key signals from their reply in a "signals" JSON object:
+- budget_mentioned: boolean
+- timeline_mentioned: string or null (e.g. "next month", "Q4")
+- competitor_mentioned: string or null (e.g. "Salesforce")
+- objection: string or null (e.g. "too expensive", "no capacity")
+- contact_name: string or null (e.g. "John")
 
 Use the examples below to calibrate your judgment. Then classify the new reply.`;
 
@@ -54,21 +61,27 @@ export async function classifyNode(state: InboxState): Promise<Partial<InboxStat
     "",
     newReply,
     "",
-    'Respond with ONLY a JSON object: { "classification": "<hot|warm|cold|ooo|bounce>", "reasoning": "<one sentence>" }',
+    'Respond with ONLY a JSON object: { "classification": "<hot|warm|cold|ooo|bounce>", "reasoning": "<one sentence>", "signals": { "budget_mentioned": false, "timeline_mentioned": null, "competitor_mentioned": null, "objection": null, "contact_name": null } }',
   ].join("\n");
 
   let classification: Classification = "warm"; // safer default than cold
   let reasoning = "AI unavailable — defaulted to warm for human review";
+  let signals: LeadSignals = {};
 
   try {
     const text = await generateText(prompt);
     const jsonMatch = text.match(/\{[\s\S]*?\}/);
     if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]) as { classification: Classification; reasoning?: string };
+      const parsed = JSON.parse(jsonMatch[0]) as {
+        classification: Classification;
+        reasoning?: string;
+        signals?: LeadSignals;
+      };
       const valid: Classification[] = ["hot", "warm", "cold", "ooo", "bounce"];
       if (valid.includes(parsed.classification)) {
         classification = parsed.classification;
         reasoning = parsed.reasoning ?? reasoning;
+        signals = parsed.signals ?? {};
       }
     }
   } catch (err) {
@@ -76,5 +89,5 @@ export async function classifyNode(state: InboxState): Promise<Partial<InboxStat
   }
 
   console.log(`[classify] ${state.lead.companyName} → ${classification} | ${reasoning}`);
-  return { classification };
+  return { classification, signals };
 }

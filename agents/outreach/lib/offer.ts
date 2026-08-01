@@ -81,22 +81,38 @@ export function resolveOffer(
   return { offer: campaign.offerText, angle: "" };
 }
 
+export type LeadFacts = {
+  hasWebsite: boolean;
+  hasPhone?: boolean;
+  rating?: number | null;
+  hasMapsListing?: boolean;
+};
+
 /**
  * Assign an offer key to a scouted lead by evaluating each offer's matchSignal
  * (in order) against lead facts. Falls back to the legacy website-based split
  * when the campaign has no offers.
  */
 export function matchOfferKey(
-  facts: { hasWebsite: boolean },
+  facts: LeadFacts,
   offers: CampaignOfferLike[] | null | undefined,
 ): string {
   const sorted = (offers ?? []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   for (const o of sorted) {
     const signal = o.matchSignal ?? "always";
+    const hasPhone = !!facts.hasPhone;
+    const rating = facts.rating ?? null;
+    const hasMaps = !!facts.hasMapsListing;
+
     if (
       signal === "always" ||
       (signal === "has_website" && facts.hasWebsite) ||
-      (signal === "no_website" && !facts.hasWebsite)
+      (signal === "no_website" && !facts.hasWebsite) ||
+      (signal === "has_phone" && hasPhone) ||
+      (signal === "no_phone" && !hasPhone) ||
+      (signal === "low_rating" && rating !== null && rating < 4.0) ||
+      (signal === "no_rating" && rating === null) ||
+      (signal === "no_maps_listing" && !hasMaps)
     ) {
       return o.key;
     }

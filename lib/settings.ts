@@ -29,6 +29,9 @@ export type SystemSettings = {
   autoSendReplies: boolean;
   notifyHotOnly: boolean;
   notifyEmailDigest: boolean;
+  ghlApiKey: string;
+  ghlLocationId: string;
+  ghlPipelineId: string;
 };
 
 /**
@@ -74,5 +77,8 @@ export async function getSystemSettings(orgId: string): Promise<SystemSettings> 
     autoSendReplies: dbSettings?.autoSendReplies ?? (process.env.AUTO_SEND_REPLIES === "true"),
     notifyHotOnly: dbSettings?.notifyHotOnly ?? false,
     notifyEmailDigest: dbSettings?.notifyEmailDigest ?? false,
+    ghlApiKey: decryptSecret(dbSettings?.ghlApiKey) || env.GHL_API_KEY || "",
+    ghlLocationId: dbSettings?.ghlLocationId || env.GHL_LOCATION_ID || "",
+    ghlPipelineId: dbSettings?.ghlPipelineId || env.GHL_PIPELINE_ID || "",
   };
 }
