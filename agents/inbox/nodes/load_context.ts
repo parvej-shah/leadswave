@@ -5,7 +5,11 @@ export async function loadContextNode(state: InboxState): Promise<Partial<InboxS
   const lead = await db.lead.findUnique({
     where: { id: state.leadId },
     include: {
-      campaign: { select: { id: true, name: true, offerText: true } },
+      campaign: {
+        include: {
+          offers: { orderBy: { order: "asc" } },
+        },
+      },
       messages: {
         orderBy: { sentAt: "asc" },
         select: { id: true, direction: true, subject: true, body: true },
@@ -22,11 +26,15 @@ export async function loadContextNode(state: InboxState): Promise<Partial<InboxS
       companyName: lead.companyName,
       email: lead.email,
       state: lead.state,
+      category: lead.category,
     },
     campaign: {
       id: lead.campaign.id,
       name: lead.campaign.name,
       offerText: lead.campaign.offerText,
+      websiteOffer: lead.campaign.websiteOffer,
+      crmOffer: lead.campaign.crmOffer,
+      offers: lead.campaign.offers,
     },
     priorMessages: lead.messages,
   };

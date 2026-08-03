@@ -226,7 +226,15 @@ export async function mapsSearchNode(state: MapsScoutState): Promise<Partial<Map
     website: p.website,
     email: null,
     description: null,
-    category: matchOfferKey({ hasWebsite: !!p.website }, state.offers),
+    category: matchOfferKey(
+      {
+        hasWebsite: !!p.website,
+        hasPhone: !!p.phone,
+        rating: p.rating,
+        hasMapsListing: !!(p.mapsUrl || p.placeId),
+      },
+      state.offers,
+    ),
     address: p.address,
     phone: p.phone,
     rating: p.rating,

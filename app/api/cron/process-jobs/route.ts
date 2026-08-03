@@ -27,6 +27,29 @@ function isAuthorized(req: NextRequest): boolean {
   return auth === `Bearer ${secret}`;
 }
 
+function getTimeInTimezone(date: Date, timeZone: string = "America/New_York") {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(date);
+    const partMap = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+
+    const dayMap: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
+    const isoDay = dayMap[partMap.weekday] ?? 1;
+    const localTime = `${partMap.hour}:${partMap.minute}`;
+    return { isoDay, localTime };
+  } catch {
+    const isoDay = date.getUTCDay() === 0 ? 7 : date.getUTCDay();
+    const localTime = `${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}`;
+    return { isoDay, localTime };
+  }
+}
+
 const FOLLOWUP_NUMBER: Record<string, number> = {
   followup_2: 2,
   followup_3: 3,
@@ -129,6 +152,20 @@ export async function POST(req: NextRequest) {
 
     for (const job of orgJobs) {
       const lead = job.lead;
+      const campaign = lead.campaign;
+
+      // Send window check: evaluate in target campaign timezone
+      const targetTz = (campaign as any)?.timezone || "America/New_York";
+      const { isoDay, localTime } = getTimeInTimezone(now, targetTz);
+
+      if (campaign?.sendDays?.length && !campaign.sendDays.includes(isoDay)) {
+        continue;
+      }
+      if (campaign?.sendWindowStart && campaign?.sendWindowEnd) {
+        if (localTime < campaign.sendWindowStart || localTime >= campaign.sendWindowEnd) {
+          continue;
+        }
+      }
 
       // Skip leads that have replied or been suppressed
       if (
@@ -203,9 +240,29 @@ export async function POST(req: NextRequest) {
       });
 
       let body: string;
+      let finalSubject = subject;
+
+      // Check if campaign has custom sequenceSteps defined from SequenceBuilderPro
+      const rawSteps = (campaign as any)?.sequenceSteps;
+      const sequenceSteps = Array.isArray(rawSteps) ? rawSteps : null;
+      const matchedStep = sequenceSteps?.find((s: any) => s.step === followupNum);
+      const enabledVariants = matchedStep?.variants?.filter((v: any) => v.enabled);
+
       if (job.overrideBody?.trim()) {
         // User previewed and edited this follow-up — send their words verbatim.
         body = job.overrideBody.trim();
+      } else if (enabledVariants && enabledVariants.length > 0) {
+        // Use variant configured in SequenceBuilderPro with template tag replacements
+        const variant = enabledVariants[lead.id.length % enabledVariants.length];
+        finalSubject = (variant.subject || subject)
+          .replace(/{{firstname}}/gi, lead.companyName)
+          .replace(/{{companyname}}/gi, lead.companyName);
+
+        body = (variant.body || "")
+          .replace(/{{firstname}}/gi, lead.companyName)
+          .replace(/{{companyname}}/gi, lead.companyName)
+          .replace(/{{website}}/gi, lead.website || "")
+          .replace(/{{category}}/gi, lead.category || "");
       } else {
         try {
           body = (await generateText(prompt)).trim();
@@ -227,11 +284,11 @@ export async function POST(req: NextRequest) {
 
       try {
         const { data: sendData, error } = sendsDisabled()
-          ? dryRunSend(lead.email, subject)
+          ? dryRunSend(lead.email, finalSubject)
           : await resend.emails.send({
               from,
               to: lead.email,
-              subject,
+              subject: finalSubject,
               html: outbound.html,
               text: outbound.text,
             });
@@ -240,7 +297,7 @@ export async function POST(req: NextRequest) {
 
         await Promise.all([
           db.message.create({
-            data: { leadId: lead.id, direction: "outbound", subject, body: outbound.bodyText, bodyHtml: outbound.bodyHtml, resendId: sendData?.id ?? null, deliveryStatus: "sent" },
+            data: { leadId: lead.id, direction: "outbound", subject: finalSubject, body: outbound.bodyText, bodyHtml: outbound.bodyHtml, resendId: sendData?.id ?? null, deliveryStatus: "sent" },
           }),
           db.lead.update({
             where: { id: lead.id },
@@ -282,6 +339,42 @@ export async function POST(req: NextRequest) {
         `Sent: ${orgProcessed} | Failed: ${orgFailed} | Total jobs: ${orgJobs.length}`,
       ];
       await sendTelegramMessage(settings.telegramChatId, lines.join("\n")).catch(() => {});
+    }
+
+    // Auto-pause evaluation for active campaigns in this org (Phase 2-B)
+    const activeCampaigns = await db.campaign.findMany({
+      where: { orgId, status: "active", autoPauseEnabled: true, deletedAt: null },
+      select: { id: true, name: true },
+    });
+
+    for (const campaign of activeCampaigns) {
+      const totalSent = await db.message.count({
+        where: { lead: { campaignId: campaign.id, orgId }, direction: "outbound" },
+      });
+      if (totalSent >= 50) {
+        const totalReplied = await db.message.count({
+          where: { lead: { campaignId: campaign.id, orgId }, direction: "inbound" },
+        });
+        const replyRate = totalReplied / totalSent;
+        if (replyRate < 0.02) {
+          await db.campaign.update({
+            where: { id: campaign.id },
+            data: { status: "paused" },
+          });
+          await logActivity({
+            orgId,
+            type: "low_engagement",
+            campaignId: campaign.id,
+            summary: `Campaign "${campaign.name}" auto-paused — ${totalSent} sends, ${totalReplied} replies (<2%)`,
+          });
+          if (settings.telegramChatId) {
+            await sendTelegramMessage(
+              settings.telegramChatId,
+              `⏸️ <b>Campaign auto-paused:</b> ${campaign.name}\n${totalSent} sends, ${totalReplied} replies — engagement fell below 2% threshold.`,
+            ).catch(() => {});
+          }
+        }
+      }
     }
   }
 

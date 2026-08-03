@@ -8,6 +8,8 @@ type ImportLead = {
   companyName?: string;
   email?: string;
   website?: string;
+  phone?: string;
+  address?: string;
   description?: string;
 };
 
@@ -70,6 +72,8 @@ export async function POST(req: NextRequest) {
       companyName: l.companyName?.trim() || "",
       email: l.email?.trim() || "",
       website: l.website?.trim() || "",
+      phone: l.phone?.trim() || "",
+      address: l.address?.trim() || "",
       description: l.description?.trim() || "",
     }))
     .filter((l) => l.companyName || l.email);
@@ -113,6 +117,8 @@ export async function POST(req: NextRequest) {
       email: l.email || null,
       emailSource: l.email ? "imported" : null,
       website: l.website || null,
+      phone: l.phone || null,
+      address: l.address || null,
       description: l.description || null,
       state: "discovered",
     })),

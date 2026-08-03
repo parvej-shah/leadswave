@@ -34,7 +34,7 @@ type InboxLead = {
   email: string | null;
   state: string;
   lastTouchedAt: string | null;
-  campaign: { name: string };
+  campaign: { id: string; name: string };
   messages: Message[];
 };
 
@@ -84,6 +84,7 @@ export default function InboxPage() {
   const [generatingDraft, setGeneratingDraft] = useState(false);
   const [suppressed, setSuppressed] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<Filter>("all");
+  const [campaignFilter, setCampaignFilter] = useState<string | null>(null);
 
   const fetchLeads = useCallback(() => {
     setLoading(true);
@@ -212,12 +213,21 @@ export default function InboxPage() {
   );
 
   const visible = useMemo(() => leads.filter((l) => !suppressed.has(l.id)), [leads, suppressed]);
+
+  const campaignOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    leads.forEach((l) => {
+      if (l.campaign?.id) seen.set(l.campaign.id, l.campaign.name);
+    });
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
+  }, [leads]);
   const hotCount = visible.filter((l) => classifyLead(l) === "hot").length;
   const warmCount = visible.length - hotCount;
 
   const filteredThreads = useMemo(
-    () => visible.filter((l) => filter === "all" || classifyLead(l) === filter),
-    [visible, filter]
+    () => visible.filter((l) => filter === "all" || classifyLead(l) === filter)
+                 .filter((l) => !campaignFilter || l.campaign?.id === campaignFilter),
+    [visible, filter, campaignFilter]
   );
 
   const grouped = useMemo(() => {
@@ -310,6 +320,19 @@ export default function InboxPage() {
               { value: "warm", label: `Warm · ${warmCount}` },
             ]}
           />
+          {/* Campaign filter */}
+          <select
+            className="font-mono text-[12px] bg-surface border border-border rounded px-2 py-1.5 text-fg-2 cursor-pointer w-full"
+            value={campaignFilter ?? ""}
+            onChange={(e) => setCampaignFilter(e.target.value || null)}
+          >
+            <option value="">All campaigns</option>
+            {campaignOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* List body */}

@@ -18,7 +18,7 @@ export async function GET() {
     },
     orderBy: { lastTouchedAt: "desc" },
     include: {
-      campaign: { select: { name: true } },
+      campaign: { select: { id: true, name: true } },
       messages: {
         orderBy: { sentAt: "asc" },
         select: { id: true, direction: true, subject: true, body: true, bodyHtml: true, sentAt: true },

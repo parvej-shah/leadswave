@@ -10,7 +10,7 @@ import { encryptSecret, maskSecret, isMaskedSecret } from "@/lib/crypto";
 const SECRET_FIELDS = [
   "resendApiKey", "firecrawlApiKey", "anthropicApiKey", "emailVerifierApiKey",
   "enrichmentApiKey", "apifyApiKey", "googleMapsApiKey", "googleClientSecret",
-  "googleRefreshToken",
+  "googleRefreshToken", "ghlApiKey",
 ] as const;
 
 export async function GET() {
@@ -50,7 +50,7 @@ export async function PUT(request: NextRequest) {
     "enrichmentProvider", "enrichmentApiKey", "apifyApiKey", "googleMapsApiKey",
     "calendarId", "dailySendLimit", "perCampaignDailyLimit", "sendThrottleSeconds",
     "autoSendReplies", "googleClientId", "googleClientSecret", "googleRefreshToken",
-    "notifyHotOnly", "notifyEmailDigest",
+    "notifyHotOnly", "notifyEmailDigest", "ghlApiKey", "ghlLocationId", "ghlPipelineId",
   ] as const;
 
   const data: Record<string, any> = {};

@@ -21,11 +21,14 @@ model User {
 }
 
 model Organization {
-  id          String       @id @default(cuid())
-  name        String
-  memberships Membership[]
-  invites     Invite[]
-  createdAt   DateTime     @default(now())
+  id                 String       @id @default(cuid())
+  name               String
+  subscriptionTier   String       @default("pro")
+  billingCustomerId  String?
+  billingStatus      String       @default("active")
+  memberships        Membership[]
+  invites            Invite[]
+  createdAt          DateTime     @default(now())
 }
 
 model Membership {
@@ -72,8 +75,16 @@ model Campaign {
   crmOffer       String?
   status         String    @default("active") // active | paused | completed
   autoSend       Boolean   @default(false)
+  autoPauseEnabled Boolean @default(true)
   scoutDepth     String    @default("normal") // light | normal | deep — maps to Places budgets
-  followupOffsets Int[]    @default([3]) // days after opener for each follow-up (max 3 steps)
+  followupOffsets  Int[]    @default([3])    // days after opener for each follow-up (max 3 steps)
+  sendDays         Int[]    @default([1,2,3,4,5]) // ISO weekday: 1=Mon 7=Sun; which days emails can send
+  sendWindowStart  String   @default("09:00")   // HH:MM UTC — earliest send time
+  sendWindowEnd    String   @default("17:00")   // HH:MM UTC — latest send time (exclusive)
+  timezone         String   @default("America/New_York") // Target IANA timezone
+  opportunitiesValue Float   @default(0)
+  conversionsValue   Float   @default(0)
+  sequenceSteps      Json?   // Structured sequence steps & variants
   leads          Lead[]
   offers         CampaignOffer[]
   createdAt      DateTime  @default(now())
@@ -224,6 +235,9 @@ model Settings {
   autoSendReplies         Boolean @default(false)
   notifyHotOnly           Boolean @default(false)
   notifyEmailDigest       Boolean @default(false)
+  ghlApiKey               String?
+  ghlLocationId           String?
+  ghlPipelineId           String?
 }
 
 model CalendarEvent {

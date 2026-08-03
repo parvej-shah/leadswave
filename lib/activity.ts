@@ -12,6 +12,8 @@ export type ActivityType =
   | "bounced"
   | "suppressed"
   | "meeting_booked"
+  | "low_engagement"
+  | "ghl_sync_failed"
   | "error";
 
 /**

@@ -8,7 +8,7 @@ const EVENT_TO_STATUS: Record<string, string> = {
   "email.delivered": "delivered",
   "email.delivery_delayed": "sent",
   "email.opened": "opened",
-  "email.clicked": "opened",
+  "email.clicked": "clicked",
   "email.bounced": "bounced",
   "email.complained": "complained",
   "email.failed": "bounced",
@@ -21,8 +21,9 @@ const STATUS_PRIORITY: Record<string, number> = {
   sent: 0,
   delivered: 1,
   opened: 2,
-  bounced: 3,
-  complained: 4,
+  clicked: 3,
+  bounced: 4,
+  complained: 5,
 };
 
 export async function POST(req: NextRequest) {
