@@ -13,11 +13,12 @@ type SuggestedArea = { area: string; reason: string; score: number };
 type CityAreas = { city: string; areas: SuggestedArea[] };
 
 type LeadMethod = "scout" | "import";
-type Phase = "details" | "choose" | "import" | "cities" | "areas" | "running" | "review" | "done";
+type Phase = "template" | "details" | "choose" | "import" | "cities" | "areas" | "running" | "review" | "done";
 
 type StepDef = { key: string; label: string };
 
 const SCOUT_STEPS: StepDef[] = [
+  { key: "template", label: "Template" },
   { key: "details", label: "Details" },
   { key: "choose", label: "Method" },
   { key: "cities", label: "Cities" },
@@ -26,6 +27,7 @@ const SCOUT_STEPS: StepDef[] = [
 ];
 
 const IMPORT_STEPS: StepDef[] = [
+  { key: "template", label: "Template" },
   { key: "details", label: "Details" },
   { key: "choose", label: "Method" },
   { key: "import", label: "Import CSV" },
@@ -38,6 +40,59 @@ const RUNNING_PHASES: [string, number, number][] = [
   ["Filtering duplicates…",   88,  8000],
   ["Almost done…",            98, 20000],
 ];
+
+type TemplateKey = "speed_to_lead" | "crm_ghl" | "back_office" | "scratch";
+
+const CAMPAIGN_TEMPLATES: Record<TemplateKey, { label: string; description: string; icon: string; offers: OfferDraft[] }> = {
+  speed_to_lead: {
+    label: "Speed-to-Lead AI",
+    description: "Missed-Call Text-Back + AI Voice Agent for home-service SMBs",
+    icon: "⚡",
+    offers: [
+      {
+        key: "speed_to_lead",
+        label: "Speed-to-Lead AI Package",
+        matchSignal: "always",
+        offerText: "We build AI systems that call back missed leads in 60 seconds — so your business is always the first to respond, even at 2am. Most home-service owners lose 30-40% of new jobs to whoever picks up first.",
+        angle: "Most home-service owners lose jobs to whoever answers first — speed wins",
+      },
+    ],
+  },
+  crm_ghl: {
+    label: "CRM / GoHighLevel",
+    description: "Full pipeline automation + GoHighLevel CRM setup",
+    icon: "🔗",
+    offers: [
+      {
+        key: "crm_setup",
+        label: "CRM & Pipeline Setup",
+        matchSignal: "has_website",
+        offerText: "We set up GoHighLevel so your pipeline runs itself — automated follow-ups, lead tracking, and booking. Most local businesses are losing leads because nothing is following up.",
+        angle: "Revenue is leaking through the cracks between new lead and booked job",
+      },
+    ],
+  },
+  back_office: {
+    label: "Back-Office Automation",
+    description: "Document and operations workflow automation",
+    icon: "📋",
+    offers: [
+      {
+        key: "back_office",
+        label: "Back-Office Automation",
+        matchSignal: "always",
+        offerText: "We automate the repetitive admin work eating your hours — proposals, scheduling, invoicing, reminders — so you can focus on billable work.",
+        angle: undefined,
+      },
+    ],
+  },
+  scratch: {
+    label: "Start from scratch",
+    description: "Blank — build your own offers from the ground up",
+    icon: "✏️",
+    offers: [],
+  },
+};
 
 function RunningIndicator() {
   const [phaseIdx, setPhaseIdx] = useState(0);
@@ -296,7 +351,7 @@ function LeadRow({ lead, checked, onToggle }: LeadRowProps) {
 export function NewCampaignWizard() {
   const router = useRouter();
 
-  const [phase, setPhase] = useState<Phase>("details");
+  const [phase, setPhase] = useState<Phase>("template");
   const [method, setMethod] = useState<LeadMethod | null>(null);
   const [creatingCampaign, setCreatingCampaign] = useState(false);
   const [name, setName] = useState("");
@@ -673,7 +728,9 @@ export function NewCampaignWizard() {
       <div className="mb-3">
         <h1 className="ds-h1 m-0 mb-0.5">New Campaign</h1>
         <p className="font-mono text-[12px] text-fg-4 m-0">
-          {phase === "choose"
+          {phase === "template"
+            ? "Pick a starting point — offers are pre-filled and fully editable."
+            : phase === "choose"
             ? "How do you want to add leads to this campaign?"
             : phase === "import"
             ? "Upload a CSV — columns are matched automatically, then review and edit before importing."
@@ -689,6 +746,41 @@ export function NewCampaignWizard() {
 
       {/* Step indicator */}
       {phase !== "running" && <StepIndicator phase={phase} method={method} />}
+
+      {/* ── TEMPLATE SELECTION ── */}
+      {phase === "template" && (
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 gap-2">
+            {(Object.entries(CAMPAIGN_TEMPLATES) as [TemplateKey, typeof CAMPAIGN_TEMPLATES[TemplateKey]][]).map(
+              ([key, tpl]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    setOffers(tpl.offers.length ? tpl.offers : DEFAULT_OFFERS);
+                    setPhase("details");
+                  }}
+                  className={[
+                    "text-left rounded-xl border px-4 py-4 transition-colors duration-150 cursor-pointer",
+                    key === "scratch"
+                      ? "bg-transparent border-dashed border-[oklch(0.26_0_0)] hover:border-fg-4"
+                      : "bg-[oklch(0.12_0_0)] border-[oklch(0.19_0_0)] hover:border-amber hover:bg-amber-bg",
+                  ].join(" ")}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl shrink-0">{tpl.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-mono text-[13px] text-fg-1 font-medium m-0">{tpl.label}</p>
+                      <p className="font-mono text-[11px] text-fg-4 m-0 mt-0.5">{tpl.description}</p>
+                    </div>
+                    <Icon name="arrow" size={14} className="text-fg-5 shrink-0" />
+                  </div>
+                </button>
+              ),
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── DETAILS ── */}
       {phase === "details" && (

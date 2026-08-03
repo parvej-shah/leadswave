@@ -31,7 +31,7 @@ export async function GET(
   const messages = leadIds.length
     ? await db.message.findMany({
         where: { leadId: { in: leadIds } },
-        select: { direction: true, deliveryStatus: true },
+        select: { direction: true, deliveryStatus: true, sentAt: true },
       })
     : [];
 
@@ -42,8 +42,13 @@ export async function GET(
   const inbound = messages.filter((m) => m.direction === "inbound");
 
   const totalSent = outbound.length;
-  const delivered = outbound.filter((m) => m.deliveryStatus === "delivered" || m.deliveryStatus === "opened").length;
-  const opened = outbound.filter((m) => m.deliveryStatus === "opened").length;
+  const delivered = outbound.filter((m) =>
+    ["delivered", "opened", "clicked"].includes(m.deliveryStatus ?? "")
+  ).length;
+  const opened = outbound.filter((m) =>
+    ["opened", "clicked"].includes(m.deliveryStatus ?? "")
+  ).length;
+  const clicked = outbound.filter((m) => m.deliveryStatus === "clicked").length;
   const bounced = outbound.filter((m) => m.deliveryStatus === "bounced").length;
   const complained = outbound.filter((m) => m.deliveryStatus === "complained").length;
 
@@ -54,6 +59,35 @@ export async function GET(
     (l) => l.state !== "discovered"
   ).length;
 
+  // Daily activity time-series for the past 30 days
+  const now = new Date();
+  const dailyActivity: { date: string; label: string; sent: number; opens: number; clicks: number; replies: number }[] = [];
+
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split("T")[0];
+    const monthDay = d.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
+
+    const sentCount = outbound.filter((m) => m.sentAt.toISOString().startsWith(dateStr)).length;
+    const opensCount = outbound.filter(
+      (m) => ["opened", "clicked"].includes(m.deliveryStatus ?? "") && m.sentAt.toISOString().startsWith(dateStr)
+    ).length;
+    const clicksCount = outbound.filter(
+      (m) => m.deliveryStatus === "clicked" && m.sentAt.toISOString().startsWith(dateStr)
+    ).length;
+    const repliesCount = inbound.filter((m) => m.sentAt.toISOString().startsWith(dateStr)).length;
+
+    dailyActivity.push({
+      date: dateStr,
+      label: monthDay,
+      sent: sentCount,
+      opens: opensCount,
+      clicks: clicksCount,
+      replies: repliesCount,
+    });
+  }
+
   return NextResponse.json({
     totalLeads,
     withEmail,
@@ -61,10 +95,16 @@ export async function GET(
     totalSent,
     delivered,
     opened,
+    clicked,
     bounced,
     complained,
     totalReplies: inbound.length,
     repliedLeads: replied,
     convertedLeads: converted,
+    opportunitiesCount: replied,
+    opportunitiesValue: (campaign as Record<string, unknown>).opportunitiesValue as number ?? 0,
+    conversionsCount: converted,
+    conversionsValue: (campaign as Record<string, unknown>).conversionsValue as number ?? 0,
+    dailyActivity,
   });
 }

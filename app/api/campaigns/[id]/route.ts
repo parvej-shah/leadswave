@@ -33,7 +33,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
 
   const { id } = await ctx.params;
   const body = await req.json();
-  const { name, query, location, offerText, websiteOffer, crmOffer, status, businessType, country, autoSend, selectedCities, selectedAreas, offers, scoutDepth, followupOffsets } = body as {
+  const { name, query, location, offerText, websiteOffer, crmOffer, status, businessType, country, autoSend, selectedCities, selectedAreas, offers, scoutDepth, followupOffsets, sendDays, sendWindowStart, sendWindowEnd, timezone, sequenceSteps } = body as {
     name?: string;
     query?: string;
     location?: string;
@@ -49,6 +49,11 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
     offers?: OfferInput[];
     scoutDepth?: string;
     followupOffsets?: number[];
+    sendDays?: number[];
+    sendWindowStart?: string;
+    sendWindowEnd?: string;
+    timezone?: string;
+    sequenceSteps?: unknown;
   };
 
   const existing = await db.campaign.findFirst({
@@ -72,6 +77,11 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
     selectedAreas?: SelectedAreas;
     scoutDepth?: string;
     followupOffsets?: number[];
+    sendDays?: number[];
+    sendWindowStart?: string;
+    sendWindowEnd?: string;
+    timezone?: string;
+    sequenceSteps?: any;
     businessTypeId?: string | null;
   } = {};
 
@@ -94,12 +104,23 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/campaigns/
   if (typeof scoutDepth === "string" && ["light", "normal", "deep"].includes(scoutDepth)) {
     data.scoutDepth = scoutDepth;
   }
+  if (typeof timezone === "string") data.timezone = timezone.trim();
+  if (sequenceSteps !== undefined) data.sequenceSteps = sequenceSteps;
   if (Array.isArray(followupOffsets)) {
     // Sanitized again at schedule time; basic bounds here (1-30 days, max 3 steps)
     data.followupOffsets = followupOffsets
       .filter((n) => Number.isFinite(n) && n >= 2 && n <= 30)
       .map((n) => Math.round(n))
       .slice(0, 3);
+  }
+  if (Array.isArray(sendDays)) {
+    data.sendDays = sendDays.filter((n) => Number.isInteger(n) && n >= 1 && n <= 7);
+  }
+  if (typeof sendWindowStart === "string" && /^\d{2}:\d{2}$/.test(sendWindowStart)) {
+    data.sendWindowStart = sendWindowStart;
+  }
+  if (typeof sendWindowEnd === "string" && /^\d{2}:\d{2}$/.test(sendWindowEnd)) {
+    data.sendWindowEnd = sendWindowEnd;
   }
   if (Array.isArray(selectedCities)) {
     data.selectedCities = selectedCities.filter((c) => typeof c === "string" && c.trim());

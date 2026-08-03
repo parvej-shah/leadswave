@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Button, Input, Toast, Select } from "@/components/ui";
 import { OffersEditor, DEFAULT_OFFERS, type OfferDraft } from "@/components/offers-editor";
+import { SequenceBuilder } from "@/components/campaigns/sequence-builder";
 
 type FormValues = {
   name: string;
@@ -241,14 +242,18 @@ export default function EditCampaignPage() {
               <option value="normal">Normal — balanced (recommended)</option>
               <option value="deep">Deep — maximum coverage</option>
             </Select>
-            <Input
-              label="Follow-up days"
-              placeholder="e.g. 3,7"
-              hint="Days after the opener for each follow-up (max 3, min 2-day gaps)."
-              value={form.followupDays}
-              onChange={setField("followupDays")}
-              disabled={saving}
-            />
+            <div>
+              <p className="font-mono text-[11px] text-fg-5 uppercase tracking-wider m-0 mb-2">Sequence</p>
+              <SequenceBuilder
+                value={form.followupDays
+                  ? form.followupDays.split(",").map(Number).filter((n) => Number.isFinite(n) && n >= 2)
+                  : [3]}
+                onChange={(offsets) =>
+                  setForm((f) => ({ ...f, followupDays: offsets.join(",") }))
+                }
+                disabled={saving}
+              />
+            </div>
           </div>
 
           {/* Offers */}

@@ -45,6 +45,11 @@ export async function POST(req: NextRequest) {
     crmOffer,
     offers,
     scoutDepth,
+    timezone,
+    sendDays,
+    sendWindowStart,
+    sendWindowEnd,
+    sequenceSteps,
   } = body as {
     name?: string;
     query?: string;
@@ -58,6 +63,11 @@ export async function POST(req: NextRequest) {
     crmOffer?: string;
     offers?: OfferInput[];
     scoutDepth?: string;
+    timezone?: string;
+    sendDays?: number[];
+    sendWindowStart?: string;
+    sendWindowEnd?: string;
+    sequenceSteps?: any;
   };
 
   const cities = Array.isArray(selectedCities) ? selectedCities.filter((c) => typeof c === "string" && c.trim()) : [];
@@ -96,6 +106,11 @@ export async function POST(req: NextRequest) {
       websiteOffer: websiteOffer || null,
       crmOffer: crmOffer || null,
       status: "active",
+      ...(timezone ? { timezone } : {}),
+      ...(Array.isArray(sendDays) ? { sendDays } : {}),
+      ...(sendWindowStart ? { sendWindowStart } : {}),
+      ...(sendWindowEnd ? { sendWindowEnd } : {}),
+      ...(sequenceSteps ? { sequenceSteps } : {}),
       ...(["light", "normal", "deep"].includes(scoutDepth ?? "") ? { scoutDepth } : {}),
       ...(normalizedOffers.length > 0 ? { offers: { create: normalizedOffers } } : {}),
     },
