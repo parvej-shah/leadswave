@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Button, Icon, Input } from "@/components/ui";
+import { replaceMergeTags } from "@/lib/email/template-tags";
+import { stripInlineSignoff } from "@/lib/email/template-tags";
 
 export type Variant = {
   id: string;
@@ -38,7 +40,7 @@ const DEFAULT_STEPS: SequenceStep[] = [
         label: "A",
         enabled: true,
         subject: "{{firstname}}, a thought for {{companyname}}",
-        body: `Hi {{firstname}},\n\nWould you be interested in exploring AI automation if it could help your team screen more candidates and significantly shorten time-to-hire?\n\nThis year in Q1, we deployed this solution internally and our team now uses it as a core part of operations.\n\nShould I share the one-page solution concept we prepared for it?\n\nRegards,\nXpeedLab Team`,
+        body: `Hi {{firstname}},\n\nWould you be interested in exploring AI automation if it could help your team screen more candidates and significantly shorten time-to-hire?\n\nThis year in Q1, we deployed this solution internally and our team now uses it as a core part of operations.\n\nShould I share the one-page solution concept we prepared for it?`,
       },
       {
         id: "v1-b",
@@ -46,13 +48,6 @@ const DEFAULT_STEPS: SequenceStep[] = [
         enabled: true,
         subject: "Could {{companyname}} screen more candidates?",
         body: `Hi {{firstname}},\n\nNoticed {{companyname}}'s work. Quick question: are you open to an AI voice assistant that handles lead follow-ups within 60 seconds?\n\nLet me know if you'd like a 2-minute demo video.`,
-      },
-      {
-        id: "v1-c",
-        label: "C",
-        enabled: false,
-        subject: "More client-ready shortlists per recruiter...",
-        body: `Hi {{firstname}},\n\nReaching out briefly regarding automation. Would love to share how similar teams saved 15+ hours per week.`,
       },
     ],
   },
@@ -84,10 +79,27 @@ export function SequenceBuilderPro({
   const [showTestModal, setShowTestModal] = useState(false);
   const [testEmailInput, setTestEmailInput] = useState(userEmail);
   const [sendingTest, setSendingTest] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok?: boolean; error?: string; sentTo?: string } | null>(null);
+  const [testResult, setTestResult] = useState<{
+    ok?: boolean;
+    error?: string;
+    sentTo?: string;
+    subject?: string;
+    bodyText?: string;
+  } | null>(null);
 
   const currentStep = steps[selectedStepIdx] ?? steps[0];
   const currentVariant = currentStep?.variants[selectedVariantIdx] ?? currentStep?.variants[0];
+
+  // Sample lead data for realistic preview parsing
+  const sampleLead = {
+    firstname: "John",
+    companyname: "Acme Pest Control",
+    website: "acmepest.com",
+    category: businessType || "Pest Control",
+  };
+
+  const parsedSubjectPreview = replaceMergeTags(currentVariant?.subject ?? "", sampleLead);
+  const parsedBodyPreview = stripInlineSignoff(replaceMergeTags(currentVariant?.body ?? "", sampleLead));
 
   function handleAddVariant(stepIdx: number) {
     const step = steps[stepIdx];
@@ -99,7 +111,7 @@ export function SequenceBuilderPro({
       label: nextLabel,
       enabled: true,
       subject: `Variant ${nextLabel}: {{companyname}}`,
-      body: `Hi {{firstname}},\n\nHere is variant ${nextLabel} draft.`,
+      body: `Hi {{firstname}},\n\nHere is variant ${nextLabel} draft for {{companyname}}.`,
     };
     const nextSteps = [...steps];
     nextSteps[stepIdx].variants.push(newVariant);
@@ -118,7 +130,7 @@ export function SequenceBuilderPro({
           label: "A",
           enabled: true,
           subject: `Re: {{firstname}}`,
-          body: `Hi {{firstname}},\n\nFollowing up on my previous message. Any thoughts?`,
+          body: `Hi {{firstname}},\n\nFollowing up on my previous message regarding {{companyname}}. Any thoughts?`,
         },
       ],
     };
@@ -179,7 +191,7 @@ export function SequenceBuilderPro({
       });
       const data = await res.json();
       if (data.subject && data.body) {
-        setAiGeneratedResult({ subject: data.subject, body: data.body });
+        setAiGeneratedResult({ subject: data.subject, body: stripInlineSignoff(data.body) });
       }
     } finally {
       setGeneratingAi(false);
@@ -217,7 +229,12 @@ export function SequenceBuilderPro({
       });
       const data = await res.json();
       if (res.ok && data.ok) {
-        setTestResult({ ok: true, sentTo: data.sentTo || testEmailInput });
+        setTestResult({
+          ok: true,
+          sentTo: data.sentTo || testEmailInput,
+          subject: data.subject,
+          bodyText: data.bodyText,
+        });
       } else {
         setTestResult({ error: data.error || "Failed to send test email" });
       }
@@ -460,34 +477,14 @@ export function SequenceBuilderPro({
             >
               ⚡ AI Writer
             </button>
-            <button
-              type="button"
-              onClick={() => insertVariable("companyname")}
-              className="hover:text-fg-1 cursor-pointer"
-              title="Insert Variable"
-            >
-              {`{ }`}
-            </button>
-            <button type="button" className="hover:text-fg-1 cursor-pointer" title="Formatting">
-              A:
-            </button>
-            <button type="button" className="hover:text-fg-1 cursor-pointer" title="Signature">
-              ✍️
-            </button>
-            <button type="button" className="hover:text-fg-1 cursor-pointer" title="Insert Link">
-              🔗
-            </button>
-            <button type="button" className="hover:text-fg-1 cursor-pointer" title="Code view">
-              {`<>`}
-            </button>
           </div>
         </div>
       </div>
 
-      {/* Send Test Email Modal */}
+      {/* Send Test Email Modal with Live Preview */}
       {showTestModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#12161F] border border-[#1E2433] rounded-xl p-5 max-w-lg w-full flex flex-col gap-4">
+          <div className="bg-[#12161F] border border-[#1E2433] rounded-xl p-5 max-w-xl w-full flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#1E2433] pb-3">
               <div className="flex items-center gap-2">
                 <span className="text-xl">📧</span>
@@ -514,11 +511,32 @@ export function SequenceBuilderPro({
                 />
               </div>
 
-              <div className="p-3 rounded-lg border border-[#1E2433] bg-[#0E121B] flex flex-col gap-1.5">
-                <span className="text-[#8A94A6] text-[10px] uppercase">Active Variant to Test:</span>
-                <p className="font-semibold text-fg-1 m-0">
-                  Step {currentStep?.step} (Variant {currentVariant?.label}): {currentVariant?.subject}
-                </p>
+              {/* Live Preview Box */}
+              <div className="p-4 rounded-xl border border-[#1E2433] bg-[#0E121B] flex flex-col gap-3">
+                <div className="flex items-center justify-between border-b border-[#1E2433] pb-2">
+                  <span className="text-[#10B981] font-semibold text-[11px] uppercase tracking-wider">
+                    👁 Exact Email Preview (Tags Parsed)
+                  </span>
+                  <span className="text-[#8A94A6] text-[11px]">
+                    Step {currentStep?.step} (Variant {currentVariant?.label})
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-1 text-[11px]">
+                  <p className="text-[#8A94A6] m-0">
+                    To: <span className="text-fg-1">{testEmailInput || "you@domain.com"}</span>
+                  </p>
+                  <p className="text-[#8A94A6] m-0 font-semibold">
+                    Subject: <span className="text-fg-1">[TEST Step {currentStep?.step}{currentVariant?.label}] {parsedSubjectPreview}</span>
+                  </p>
+                </div>
+
+                <div className="border border-[#1E2433] bg-[#12161F] rounded-lg p-3.5 font-sans text-[12.5px] text-fg-2 whitespace-pre-wrap leading-relaxed">
+                  {parsedBodyPreview}
+                  <div className="mt-4 pt-3 border-t border-[#1E2433] font-mono text-[11px] text-[#8A94A6]">
+                    <p className="m-0 text-[#10B981] font-semibold">✓ System Signature Attached Below Divider (Single Signature Guaranteed)</p>
+                  </div>
+                </div>
               </div>
 
               {testResult && (
@@ -531,7 +549,12 @@ export function SequenceBuilderPro({
                   ].join(" ")}
                 >
                   {testResult.ok ? (
-                    <span>✓ Test email sent successfully to <strong>{testResult.sentTo}</strong>! Check your inbox.</span>
+                    <div>
+                      <p className="m-0 font-semibold">✓ Test email sent successfully to {testResult.sentTo}!</p>
+                      {testResult.subject && (
+                        <p className="m-0 mt-1 text-[11px] opacity-90">Subject: {testResult.subject}</p>
+                      )}
+                    </div>
                   ) : (
                     <span>❌ {testResult.error}</span>
                   )}
@@ -617,7 +640,7 @@ export function SequenceBuilderPro({
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-[#12161F] border border-[#1E2433] rounded-xl p-5 max-w-lg w-full flex flex-col gap-4">
             <div className="flex items-center justify-between border-b border-[#1E2433] pb-3">
-              <h3 className="font-mono text-[14px] font-semibold text-fg-1 m-0">👁 Sample Lead Preview</h3>
+              <h3 className="font-mono text-[14px] font-semibold text-fg-1 m-0">👁 Live Sample Email Preview</h3>
               <button
                 type="button"
                 onClick={() => setShowPreviewModal(false)}
@@ -632,21 +655,15 @@ export function SequenceBuilderPro({
                 To: <span className="text-fg-1">john@acmepest.com</span>
               </p>
               <p className="text-[#8A94A6] m-0 font-semibold">
-                Subject:{" "}
-                <span className="text-fg-1">
-                  {(currentVariant?.subject ?? "")
-                    .replace(/{{firstname}}/gi, "John")
-                    .replace(/{{companyname}}/gi, "Acme Pest Control")}
-                </span>
+                Subject: <span className="text-fg-1">{parsedSubjectPreview}</span>
               </p>
             </div>
 
             <div className="border border-[#1E2433] bg-[#0E121B] rounded-lg p-4 font-sans text-[13px] text-fg-2 whitespace-pre-wrap leading-relaxed">
-              {(currentVariant?.body ?? "")
-                .replace(/{{firstname}}/gi, "John")
-                .replace(/{{companyname}}/gi, "Acme Pest Control")
-                .replace(/{{website}}/gi, "acmepest.com")
-                .replace(/{{category}}/gi, "Speed-to-Lead AI")}
+              {parsedBodyPreview}
+              <div className="mt-4 pt-3 border-t border-[#1E2433] font-mono text-[11px] text-[#8A94A6]">
+                <p className="m-0 text-[#10B981]">✓ Single System Signature Formatted via Resend</p>
+              </div>
             </div>
 
             <Button type="button" onClick={() => setShowPreviewModal(false)} className="mt-2">

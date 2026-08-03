@@ -7,6 +7,8 @@ import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { loadContextNode } from "@/agents/outreach/nodes/load_context";
 import { personalizeNode } from "@/agents/outreach/nodes/personalize";
 import { sendsDisabled, dryRunSend } from "@/lib/email/guard";
+import { replaceMergeTags } from "@/lib/email/template-tags";
+import { buildOutboundEmail } from "@/lib/email/signature";
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   let org;
@@ -53,30 +55,21 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     orderBy: { createdAt: "desc" },
   });
 
-  const companyName = sampleLead?.companyName || "Acme Pest Control";
-  const contactName = companyName.split(" ")[0] || "John";
-  const website = sampleLead?.website || "acmepest.com";
-  const category = sampleLead?.category || campaign.businessType || "Pest Control";
+  const leadData = {
+    companyname: sampleLead?.companyName || "Acme Pest Control",
+    firstname: sampleLead?.companyName?.split(" ")[0] || "John",
+    website: sampleLead?.website || "acmepest.com",
+    category: sampleLead?.category || campaign.businessType || "Pest Control",
+  };
 
   try {
-    let finalSubject: string;
-    let finalBody: string;
+    let rawSubject: string;
+    let rawBody: string;
 
     if (customSubject && customBody) {
-      // Use provided custom subject and body from Sequence Editor
-      finalSubject = `[TEST Step ${stepNum}${variantLabel}] ` + customSubject
-        .replace(/{{firstname}}/gi, contactName)
-        .replace(/{{companyname}}/gi, companyName)
-        .replace(/{{website}}/gi, website)
-        .replace(/{{category}}/gi, category);
-
-      finalBody = customBody
-        .replace(/{{firstname}}/gi, contactName)
-        .replace(/{{companyname}}/gi, companyName)
-        .replace(/{{website}}/gi, website)
-        .replace(/{{category}}/gi, category);
+      rawSubject = `[TEST Step ${stepNum}${variantLabel}] ` + customSubject;
+      rawBody = customBody;
     } else {
-      // Autopilot draft fallback against real or sample lead
       if (sampleLead) {
         const baseState = {
           leadId: sampleLead.id,
@@ -95,13 +88,24 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         };
         const withContext = { ...baseState, ...(await loadContextNode(baseState)) };
         const withDraft = { ...withContext, ...(await personalizeNode(withContext)) };
-        finalSubject = `[TEST] ${withDraft.emailDraft.subject}`;
-        finalBody = withDraft.emailDraft.body;
+        rawSubject = `[TEST] ${withDraft.emailDraft.subject}`;
+        rawBody = withDraft.emailDraft.body;
       } else {
-        finalSubject = `[TEST] ${campaign.name} Outreach Preview`;
-        finalBody = `Hi ${contactName},\n\nThis is a test email preview for ${companyName} (${category}).`;
+        rawSubject = `[TEST] ${campaign.name} Outreach Preview`;
+        rawBody = `Hi {{firstname}},\n\nThis is a test email preview for {{companyname}} ({{category}}).`;
       }
     }
+
+    // Perform tag replacements across subject and body
+    const finalSubject = replaceMergeTags(rawSubject, leadData);
+    const parsedBody = replaceMergeTags(rawBody, leadData);
+
+    // Build outbound email with system signature deduplication
+    const outbound = buildOutboundEmail({
+      bodyText: parsedBody,
+      signatureHtml: settings.signatureHtml,
+      signatureText: settings.signatureText || (settings.fromName ? `— ${settings.fromName}` : ""),
+    });
 
     if (sendsDisabled()) {
       dryRunSend(targetEmail, finalSubject);
@@ -112,7 +116,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         from,
         to: targetEmail,
         subject: finalSubject,
-        text: finalBody,
+        html: outbound.html,
+        text: outbound.text,
       });
       if (error) throw new Error(error.message ?? "Send failed");
     }
@@ -120,8 +125,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     return NextResponse.json({
       ok: true,
       sentTo: targetEmail,
-      sampleCompany: companyName,
+      sampleCompany: leadData.companyname,
       subject: finalSubject,
+      bodyHtml: outbound.html,
+      bodyText: outbound.text,
+      fromEmail: settings.fromEmail,
+      fromName: settings.fromName ?? "",
     });
   } catch (err: any) {
     console.error("[test-send] Error:", err);
