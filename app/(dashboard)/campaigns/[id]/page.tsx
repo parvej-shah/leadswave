@@ -17,6 +17,7 @@ import {
 } from "@/components/ui";
 import { AnalyticsView } from "@/components/campaigns/analytics-view";
 import { SequenceBuilderPro, type SequenceStep } from "@/components/campaigns/sequence-builder-pro";
+import { WhatsAppButton } from "@/components/whatsapp-button";
 import { CoverageMapClient } from "../../map/coverage-map-client";
 
 type Lead = {
@@ -880,7 +881,18 @@ export default function CampaignDetailPage() {
                       {lead.companyName}
                     </Link>
                   </div>
-                  <div className="text-fg-3 truncate">{lead.email || lead.phone || "—"}</div>
+                  <div className="text-fg-3 truncate flex items-center gap-1.5 min-w-0 pr-2">
+                    <span className="truncate">{lead.email || lead.phone || "—"}</span>
+                    {lead.phone && (
+                      <WhatsAppButton
+                        leadId={lead.id}
+                        phone={lead.phone}
+                        companyName={lead.companyName}
+                        label="💬 WA"
+                        className="font-mono text-[10px] text-[#10B981] hover:underline px-1.5 py-0.5 rounded bg-[#10B981]/10 border border-[#10B981]/30 cursor-pointer shrink-0"
+                      />
+                    )}
+                  </div>
                   <div>
                     <StateBadge state={lead.state as LeadState} />
                   </div>
