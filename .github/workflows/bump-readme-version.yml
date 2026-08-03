@@ -1,0 +1,59 @@
+name: Bump README version
+
+on:
+  push:
+    branches:
+      - main
+
+# Keep multiple incoming pushes ordered so two bumps cannot overwrite each other.
+concurrency:
+  group: bump-readme-version-main
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  bump-version:
+    # Owner pushes are already versioned and must never start another bump.
+    if: github.actor != 'parvej-shah' && !contains(github.event.head_commit.message, '[skip ci]')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Update README version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git pull --rebase origin main
+
+          version_line=$(grep -m1 -E '^Version: v[0-9]+$' README.md || true)
+          if [[ -z "$version_line" ]]; then
+            echo "README.md does not contain a line matching: Version: v<number>" >&2
+            exit 1
+          fi
+
+          current_version=${version_line##*v}
+          next_version=$((current_version + 1))
+          sed -i "0,/^Version: v[0-9][0-9]*$/s//Version: v${next_version}/" README.md
+
+          echo "next_version=v${next_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push as parvej-shah
+        env:
+          NEXT_VERSION: ${{ steps.version.outputs.next_version }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "parvej-shah"
+          git config user.email "parvejshahlabib007@gmail.com"
+          git add README.md
+          git commit -m "chore: bump README version to ${NEXT_VERSION} [skip ci]"
+          git push origin HEAD:main
