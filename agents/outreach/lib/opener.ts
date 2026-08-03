@@ -206,17 +206,17 @@ export function buildWhatsAppOpenerPrompt(
   ctx: OpenerContext,
   opts: { language: OutreachLanguage },
 ): string {
-  return `You are writing a first-touch WhatsApp message on behalf of ${ctx.fromName || "our team"} to a local business.
+  return `You are writing a first-touch WhatsApp text message to ${ctx.companyName}.
 
 ${contextBlock(ctx)}
 
-${varietyBlock(ctx.companyName + "::wa")}
-
-Write the WhatsApp message. Rules:
-- WhatsApp tone: warm, casual, like texting a busy business owner — not a formal email.
-- Follow the body opening above for how to start; do not reuse the worn phrases listed.
-${SHARED_RULES}
-- 2-4 short sentences, max ~60 words. No markdown, at most one emoji.
+CRITICAL WHATSAPP COMPLIANCE & ANTI-SPAM FRAMING:
+- You are reaching out personally as a local contractor, customer, or industry peer inquiring about their services.
+- NEVER sound like a marketer, agency, or software vendor.
+- STRICTLY FORBIDDEN: Do NOT mention "AI", "automation", "lead generation", "agency", "marketing", "software", or "booking a call".
+- Keep it extremely short (1-2 sentences, max 30 words).
+- Tone: warm, natural, personal, as if texting a local business owner directly.
+- Open with a polite greeting and a genuine question about their work or project availability in ${ctx.location || "their area"}.
 ${languageRule(opts.language)}
 Return the message text only.`;
 }

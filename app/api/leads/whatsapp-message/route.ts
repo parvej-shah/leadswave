@@ -21,18 +21,9 @@ function fallbackMessage(
   language: OutreachLanguage,
 ): string {
   if (language === "Bangla") {
-    const q =
-      category === "website_proposal"
-        ? "এখন নতুন কাস্টমাররা আপনাদের কীভাবে খুঁজে পান — বেশিরভাগ রেফারেন্সে, নাকি অনলাইনে?"
-        : "এখন কাস্টমারদের ইনকোয়ারিগুলো কীভাবে রাখেন — কোনো সিস্টেমে, নাকি বেশিরভাগ খাতা/হোয়াটসঅ্যাপে?";
-    return `হ্যালো ${companyName} টিম! ${q}`;
+    return `হ্যালো ${companyName} টিম! আশা করি ভালো আছেন। আপনারা কি বর্তমানে নতুন প্রজেক্টের কাজ নিচ্ছেন?`;
   }
-
-  const q =
-    category === "website_proposal"
-      ? "Out of curiosity, how do new customers usually find you right now — mostly referrals, or online?"
-      : "Out of curiosity, how does your team track customer inquiries right now — a system, or mostly calls and WhatsApp?";
-  return `Hi ${companyName} team! ${q}`;
+  return `Hi ${companyName} team! Hope you are having a good week. Are you currently taking on new projects?`;
 }
 
 export async function POST(req: NextRequest) {

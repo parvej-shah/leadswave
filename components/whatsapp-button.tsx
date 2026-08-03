@@ -10,6 +10,16 @@ import { plainToHtml } from "@/lib/html/plain";
  * (AI-personalized, with a template fallback), lets the user edit it, then
  * opens WhatsApp click-to-chat with the message prefilled.
  */
+export function normalizeWhatsAppPhone(phone: string): string {
+  if (!phone) return "";
+  let digits = phone.replace(/\D/g, "");
+  // If 10 digits (e.g. US 3055550199), prepend country code '1' -> 13055550199
+  if (digits.length === 10) {
+    digits = `1${digits}`;
+  }
+  return digits;
+}
+
 export function WhatsAppButton({
   leadId,
   phone,
@@ -63,10 +73,9 @@ export function WhatsAppButton({
   }
 
   function openWhatsApp() {
-    const digits = phone.replace(/\D/g, "");
-    // web.whatsapp.com directly (wa.me would try to open the desktop app first)
+    const cleanDigits = normalizeWhatsAppPhone(phone);
     window.open(
-      `https://web.whatsapp.com/send?phone=${digits}&text=${encodeURIComponent(message)}`,
+      `https://api.whatsapp.com/send?phone=${cleanDigits}&text=${encodeURIComponent(message)}`,
       "_blank"
     );
   }
