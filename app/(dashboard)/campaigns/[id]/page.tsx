@@ -66,6 +66,7 @@ type CampaignStats = {
   totalSent: number;
   delivered: number;
   opened: number;
+  clicked?: number;
   bounced: number;
   complained: number;
   totalReplies: number;
@@ -75,7 +76,7 @@ type CampaignStats = {
   opportunitiesValue?: number;
   conversionsCount?: number;
   conversionsValue?: number;
-  dailyActivity?: { date: string; label: string; sent: number; opens: number; replies: number }[];
+  dailyActivity?: { date: string; label: string; sent: number; opens: number; clicks?: number; replies: number }[];
 };
 
 const STATE_KEYS: LeadState[] = [
@@ -102,12 +103,6 @@ function relativeTime(iso: string | null): string {
   if (d < 30) return `${d}d ago`;
   const mo = Math.floor(d / 30);
   return `${mo}mo ago`;
-}
-
-function truncateUrl(href: string): string {
-  let s = href.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
-  if (s.length > 26) s = s.slice(0, 24) + "…";
-  return s;
 }
 
 export default function CampaignDetailPage() {
@@ -141,6 +136,19 @@ export default function CampaignDetailPage() {
   const [editTimezone, setEditTimezone] = useState<string | null>(null);
   const [savingWindow, setSavingWindow] = useState(false);
   const [windowError, setWindowError] = useState<string | null>(null);
+
+  // Manual Lead Addition Modal State
+  const [showManualLeadModal, setShowManualLeadModal] = useState(false);
+  const [manualLeadForm, setManualLeadForm] = useState({
+    companyName: "",
+    email: "",
+    phone: "",
+    website: "",
+    category: "",
+    address: "",
+  });
+  const [savingManualLead, setSavingManualLead] = useState(false);
+  const [manualLeadError, setManualLeadError] = useState<string | null>(null);
 
   const [addLeadsOpen, setAddLeadsOpen] = useState(false);
   const [moreOptionsOpen, setMoreOptionsOpen] = useState(false);
@@ -307,6 +315,43 @@ export default function CampaignDetailPage() {
     }
   }
 
+  async function handleCreateManualLead() {
+    if (!manualLeadForm.companyName.trim() && !manualLeadForm.email.trim()) {
+      setManualLeadError("Company name or contact email is required");
+      return;
+    }
+    setManualLeadError(null);
+    setSavingManualLead(true);
+    try {
+      const res = await fetch("/api/leads/manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          campaignId: id,
+          companyName: manualLeadForm.companyName,
+          email: manualLeadForm.email,
+          phone: manualLeadForm.phone,
+          website: manualLeadForm.website,
+          category: manualLeadForm.category || campaign?.businessType || "",
+          address: manualLeadForm.address,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setManualLeadError(data.error || "Failed to add lead");
+      } else {
+        setShowManualLeadModal(false);
+        setManualLeadForm({ companyName: "", email: "", phone: "", website: "", category: "", address: "" });
+        refreshLeads();
+        refreshStats();
+      }
+    } catch (e: any) {
+      setManualLeadError(e.message || "Network error");
+    } finally {
+      setSavingManualLead(false);
+    }
+  }
+
   function toggleSort(key: SortKey) {
     setSort((s) =>
       s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" }
@@ -380,6 +425,16 @@ export default function CampaignDetailPage() {
 
               {addLeadsOpen && (
                 <div className="absolute right-0 top-full mt-1 w-52 bg-[#12161F] border border-[#1E2433] rounded-lg shadow-xl z-30 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddLeadsOpen(false);
+                      setShowManualLeadModal(true);
+                    }}
+                    className="w-full text-left flex items-center gap-2.5 px-3 py-2.5 font-mono text-[12px] text-fg-2 hover:bg-[#1E2433] transition-colors cursor-pointer"
+                  >
+                    <span className="text-[14px]">➕</span> Add Lead Manually
+                  </button>
                   <Link
                     href={`/campaigns/${id}/scout`}
                     className="flex items-center gap-2.5 px-3 py-2.5 font-mono text-[12px] text-fg-2 hover:bg-[#1E2433] transition-colors"
@@ -508,6 +563,7 @@ export default function CampaignDetailPage() {
       {activeTab === "sequences" && (
         <SequenceBuilderPro
           initialSteps={campaign.sequenceSteps ?? undefined}
+          campaignId={id}
           campaignName={campaign.name}
           businessType={campaign.businessType ?? ""}
           offerText={campaign.offerText ?? ""}
@@ -724,7 +780,7 @@ export default function CampaignDetailPage() {
       {/* 6. LEADS TAB */}
       {activeTab === "leads" && (
         <div className="flex flex-col gap-3.5">
-          {/* Controls Bar: Search & Filters */}
+          {/* Controls Bar: Search, Filters & Add Lead CTA */}
           <div className="flex items-center justify-between gap-3 flex-wrap bg-[#12161F] border border-[#1E2433] rounded-xl p-3">
             <div className="flex items-center gap-2 flex-wrap">
               {STATE_KEYS.map((s) => {
@@ -749,12 +805,20 @@ export default function CampaignDetailPage() {
               })}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setShowManualLeadModal(true)}
+                className="bg-[#0066FF] hover:bg-[#0052CC] text-white font-mono text-[11px] font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <span>➕</span> Add Lead
+              </button>
+
               <Input
                 placeholder="Search leads…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-48 bg-[#0E121B] text-[12px]"
+                className="w-44 bg-[#0E121B] text-[12px]"
               />
               {(searchQuery || stateFilter !== "all") && (
                 <Button
@@ -777,9 +841,18 @@ export default function CampaignDetailPage() {
           {/* Leads Table */}
           {filteredLeads.length === 0 ? (
             <div className="bg-[#12161F] border border-[#1E2433] rounded-xl px-6 py-10 text-center">
-              <p className="font-mono text-[13px] text-[#8A94A6] m-0">
-                {leads.length === 0 ? "No leads yet — run the scout or upload a CSV." : "No leads match your filters."}
+              <p className="font-mono text-[13px] text-[#8A94A6] m-0 mb-3">
+                {leads.length === 0 ? "No leads yet — add a lead manually, run the scout, or upload a CSV." : "No leads match your filters."}
               </p>
+              {leads.length === 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowManualLeadModal(true)}
+                  className="bg-[#0066FF] hover:bg-[#0052CC] text-white font-mono text-[12px] font-semibold px-4 py-2 rounded-lg inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <span>➕</span> Add First Lead Manually
+                </button>
+              )}
             </div>
           ) : (
             <div className="bg-[#12161F] border border-[#1E2433] rounded-xl overflow-hidden">
@@ -822,6 +895,102 @@ export default function CampaignDetailPage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Manual Lead Addition Modal */}
+      {showManualLeadModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#12161F] border border-[#1E2433] rounded-xl p-5 max-w-md w-full flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-[#1E2433] pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">➕</span>
+                <h3 className="font-mono text-[14px] font-semibold text-fg-1 m-0">Add Lead Manually</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowManualLeadModal(false)}
+                className="text-fg-4 hover:text-fg-1 font-mono text-[14px]"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-3 font-mono text-[12px]">
+              <div>
+                <label className="text-[#8A94A6] mb-1 block">Company / Business Name *</label>
+                <Input
+                  value={manualLeadForm.companyName}
+                  onChange={(e) => setManualLeadForm({ ...manualLeadForm, companyName: e.target.value })}
+                  placeholder="e.g. Apex Pest Control"
+                  className="bg-[#0E121B] border-[#1E2433]"
+                />
+              </div>
+
+              <div>
+                <label className="text-[#8A94A6] mb-1 block">Contact Email Address</label>
+                <Input
+                  type="email"
+                  value={manualLeadForm.email}
+                  onChange={(e) => setManualLeadForm({ ...manualLeadForm, email: e.target.value })}
+                  placeholder="e.g. owner@apexpest.com"
+                  className="bg-[#0E121B] border-[#1E2433]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[#8A94A6] mb-1 block">Phone Number</label>
+                  <Input
+                    value={manualLeadForm.phone}
+                    onChange={(e) => setManualLeadForm({ ...manualLeadForm, phone: e.target.value })}
+                    placeholder="+1 555-0199"
+                    className="bg-[#0E121B] border-[#1E2433]"
+                  />
+                </div>
+                <div>
+                  <label className="text-[#8A94A6] mb-1 block">Category / Niche</label>
+                  <Input
+                    value={manualLeadForm.category}
+                    onChange={(e) => setManualLeadForm({ ...manualLeadForm, category: e.target.value })}
+                    placeholder={campaign.businessType || "Pest Control"}
+                    className="bg-[#0E121B] border-[#1E2433]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[#8A94A6] mb-1 block">Website URL</label>
+                <Input
+                  value={manualLeadForm.website}
+                  onChange={(e) => setManualLeadForm({ ...manualLeadForm, website: e.target.value })}
+                  placeholder="https://apexpest.com"
+                  className="bg-[#0E121B] border-[#1E2433]"
+                />
+              </div>
+
+              <div>
+                <label className="text-[#8A94A6] mb-1 block">Address / Location</label>
+                <Input
+                  value={manualLeadForm.address}
+                  onChange={(e) => setManualLeadForm({ ...manualLeadForm, address: e.target.value })}
+                  placeholder="Miami, FL"
+                  className="bg-[#0E121B] border-[#1E2433]"
+                />
+              </div>
+
+              {manualLeadError && <p className="font-mono text-[11px] text-red-400 m-0">{manualLeadError}</p>}
+
+              <button
+                type="button"
+                onClick={handleCreateManualLead}
+                disabled={savingManualLead}
+                className="w-full bg-[#0066FF] hover:bg-[#0052CC] text-white py-2 rounded-lg font-mono font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-1"
+              >
+                {savingManualLead ? "Saving lead to database..." : "➕ Add Lead to Campaign"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

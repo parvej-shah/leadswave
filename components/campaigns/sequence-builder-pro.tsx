@@ -19,9 +19,11 @@ export type SequenceStep = {
 
 type SequenceBuilderProProps = {
   initialSteps?: SequenceStep[];
+  campaignId?: string;
   campaignName?: string;
   businessType?: string;
   offerText?: string;
+  userEmail?: string;
   onSave?: (steps: SequenceStep[]) => Promise<void>;
   disabled?: boolean;
 };
@@ -58,9 +60,11 @@ const DEFAULT_STEPS: SequenceStep[] = [
 
 export function SequenceBuilderPro({
   initialSteps = DEFAULT_STEPS,
+  campaignId = "",
   campaignName = "",
   businessType = "",
   offerText = "",
+  userEmail = "xpeedlab@gmail.com",
   onSave,
   disabled,
 }: SequenceBuilderProProps) {
@@ -75,6 +79,12 @@ export function SequenceBuilderPro({
   const [aiPromptHint, setAiPromptHint] = useState("");
   const [generatingAi, setGeneratingAi] = useState(false);
   const [aiGeneratedResult, setAiGeneratedResult] = useState<{ subject: string; body: string } | null>(null);
+
+  // Send Test Email modal state
+  const [showTestModal, setShowTestModal] = useState(false);
+  const [testEmailInput, setTestEmailInput] = useState(userEmail);
+  const [sendingTest, setSendingTest] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok?: boolean; error?: string; sentTo?: string } | null>(null);
 
   const currentStep = steps[selectedStepIdx] ?? steps[0];
   const currentVariant = currentStep?.variants[selectedVariantIdx] ?? currentStep?.variants[0];
@@ -184,6 +194,38 @@ export function SequenceBuilderPro({
     });
     setShowAiModal(false);
     setAiGeneratedResult(null);
+  }
+
+  async function handleSendTestEmail() {
+    if (!campaignId) {
+      setTestResult({ error: "Save campaign first before sending test email" });
+      return;
+    }
+    setSendingTest(true);
+    setTestResult(null);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/test-send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          testEmail: testEmailInput,
+          subject: currentVariant?.subject,
+          body: currentVariant?.body,
+          stepNum: currentStep?.step,
+          variantLabel: currentVariant?.label,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setTestResult({ ok: true, sentTo: data.sentTo || testEmailInput });
+      } else {
+        setTestResult({ error: data.error || "Failed to send test email" });
+      }
+    } catch (e: any) {
+      setTestResult({ error: e.message || "Network error" });
+    } finally {
+      setSendingTest(false);
+    }
   }
 
   async function handleSaveAll() {
@@ -326,8 +368,8 @@ export function SequenceBuilderPro({
       <div className="lg:col-span-8 bg-[#12161F] border border-[#1E2433] rounded-xl p-5 flex flex-col justify-between">
         <div className="flex flex-col gap-4">
           {/* Top Bar inside Editor */}
-          <div className="flex items-center justify-between border-b border-[#1E2433] pb-3">
-            <div className="flex items-center gap-2 flex-1 mr-3">
+          <div className="flex items-center justify-between border-b border-[#1E2433] pb-3 flex-wrap gap-2">
+            <div className="flex items-center gap-2 flex-1 min-w-[240px]">
               <span className="font-mono text-[12px] text-[#8A94A6] shrink-0">Subject</span>
               <Input
                 value={currentVariant?.subject ?? ""}
@@ -344,6 +386,14 @@ export function SequenceBuilderPro({
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#1E2433] bg-[#0E121B] font-mono text-[11px] text-fg-3 hover:text-fg-1 cursor-pointer"
               >
                 👁 Preview
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowTestModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#10B981]/40 bg-[#10B981]/10 text-[#10B981] font-mono text-[11px] font-semibold hover:border-[#10B981] cursor-pointer"
+                title="Send Test Email"
+              >
+                📧 Send Test
               </button>
               <button
                 type="button"
@@ -383,7 +433,7 @@ export function SequenceBuilderPro({
         </div>
 
         {/* Bottom Editor Toolbar */}
-        <div className="flex items-center justify-between border-t border-[#1E2433] pt-4 mt-4">
+        <div className="flex items-center justify-between border-t border-[#1E2433] pt-4 mt-4 flex-wrap gap-3">
           <Button
             type="button"
             onClick={handleSaveAll}
@@ -394,6 +444,14 @@ export function SequenceBuilderPro({
           </Button>
 
           <div className="flex items-center gap-3 font-mono text-[12px] text-[#8A94A6]">
+            <button
+              type="button"
+              onClick={() => setShowTestModal(true)}
+              className="text-[#10B981] hover:text-white cursor-pointer font-semibold"
+              title="Send Test Email"
+            >
+              📧 Send Test
+            </button>
             <button
               type="button"
               onClick={() => setShowAiModal(true)}
@@ -425,6 +483,73 @@ export function SequenceBuilderPro({
           </div>
         </div>
       </div>
+
+      {/* Send Test Email Modal */}
+      {showTestModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#12161F] border border-[#1E2433] rounded-xl p-5 max-w-lg w-full flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-[#1E2433] pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">📧</span>
+                <h3 className="font-mono text-[14px] font-semibold text-fg-1 m-0">Send Test Email</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTestModal(false)}
+                className="text-fg-4 hover:text-fg-1 font-mono text-[14px]"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-3 font-mono text-[12px]">
+              <div>
+                <label className="text-[#8A94A6] mb-1 block">Test Recipient Email Address:</label>
+                <Input
+                  type="email"
+                  value={testEmailInput}
+                  onChange={(e) => setTestEmailInput(e.target.value)}
+                  placeholder="e.g. xpeedlab@gmail.com"
+                  className="bg-[#0E121B] border-[#1E2433]"
+                />
+              </div>
+
+              <div className="p-3 rounded-lg border border-[#1E2433] bg-[#0E121B] flex flex-col gap-1.5">
+                <span className="text-[#8A94A6] text-[10px] uppercase">Active Variant to Test:</span>
+                <p className="font-semibold text-fg-1 m-0">
+                  Step {currentStep?.step} (Variant {currentVariant?.label}): {currentVariant?.subject}
+                </p>
+              </div>
+
+              {testResult && (
+                <div
+                  className={[
+                    "p-3 rounded-lg border text-[12px]",
+                    testResult.ok
+                      ? "bg-[#10B981]/15 border-[#10B981]/40 text-[#10B981]"
+                      : "bg-red-500/15 border-red-500/40 text-red-400",
+                  ].join(" ")}
+                >
+                  {testResult.ok ? (
+                    <span>✓ Test email sent successfully to <strong>{testResult.sentTo}</strong>! Check your inbox.</span>
+                  ) : (
+                    <span>❌ {testResult.error}</span>
+                  )}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleSendTestEmail}
+                disabled={sendingTest || !testEmailInput.trim()}
+                className="w-full bg-[#10B981] hover:bg-[#059669] text-white py-2 rounded-lg font-mono font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-1"
+              >
+                {sendingTest ? "Sending test email via Resend..." : "📧 Send Test Email Now"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* AI Gemini Copy Writer Modal */}
       {showAiModal && (
