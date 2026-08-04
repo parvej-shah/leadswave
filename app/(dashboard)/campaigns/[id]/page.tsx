@@ -264,6 +264,26 @@ export default function CampaignDetailPage() {
     });
   }, [leads, stateFilter, searchQuery, sort]);
 
+  const [runningOutreach, setRunningOutreach] = useState(false);
+
+  async function handleRunOutreach() {
+    if (!campaign) return;
+    setRunningOutreach(true);
+    try {
+      const res = await fetch(`/api/campaigns/${id}/send-openers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limit: 10 }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        await Promise.all([refreshLeads(), refreshStats()]);
+      }
+    } finally {
+      setRunningOutreach(false);
+    }
+  }
+
   async function handleToggleStatus() {
     if (!campaign) return;
     setTogglingStatus(true);
@@ -557,6 +577,8 @@ export default function CampaignDetailPage() {
           status={campaign.status}
           stats={stats}
           onOpenSettings={() => setActiveTab("options")}
+          onRunOutreach={handleRunOutreach}
+          runningOutreach={runningOutreach}
         />
       )}
 
