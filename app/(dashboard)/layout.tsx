@@ -6,6 +6,7 @@ import { MobileTabBar } from "./mobile-tab-bar";
 import { MobileTopBar } from "./mobile-top-bar";
 import { CommandPalette } from "./command-palette";
 import { Toaster } from "@/components/ui/toaster";
+import { NavigationLoader } from "@/components/navigation-loader";
 
 export default async function DashboardLayout({
   children,
@@ -38,7 +39,8 @@ export default async function DashboardLayout({
 
   return (
     <Toaster>
-    <div className="flex min-h-screen bg-canvas">
+      <NavigationLoader />
+      <div className="flex min-h-screen bg-canvas">
       <Sidebar
         userEmail={session.user.email ?? ""}
         userName={session.user.name ?? ""}

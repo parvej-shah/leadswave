@@ -148,11 +148,12 @@
   }
   html {
     font-family: var(--font-sans);
-    background: var(--canvas);
+    background: #0B0F17;
     color: var(--fg-2);
   }
   body {
-    background: var(--canvas);
+    background: radial-gradient(circle at 50% 0%, #131B2E 0%, #0B0F17 75%);
+    background-attachment: fixed;
     color: var(--fg-2);
     font-family: var(--font-sans);
     font-size: 13px;
@@ -163,6 +164,39 @@
     background: var(--amber-bg);
     color: var(--fg-1);
   }
+}
+
+/* ============================================================
+   Glassmorphism & Micro-animations
+   ============================================================ */
+
+.glass-card {
+  background: rgba(18, 24, 36, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.glass-card-hover {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glass-card-hover:hover {
+  border-color: rgba(0, 102, 255, 0.4);
+  box-shadow: 0 12px 36px 0 rgba(0, 102, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+.glow-blue {
+  box-shadow: 0 0 20px -3px rgba(0, 102, 255, 0.4);
+}
+
+.glow-emerald {
+  box-shadow: 0 0 20px -3px rgba(16, 185, 129, 0.4);
+}
+
+.glow-amber {
+  box-shadow: 0 0 20px -3px rgba(245, 158, 11, 0.4);
 }
 
 /* ============================================================
