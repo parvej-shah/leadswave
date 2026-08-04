@@ -10,6 +10,18 @@ import { sendTelegramMessage } from "@/lib/telegram";
 import { sendsDisabled, dryRunSend } from "@/lib/email/guard";
 import { getSystemSettings } from "@/lib/settings";
 import { logActivity, logError } from "@/lib/activity";
+import { replaceMergeTags } from "@/lib/email/template-tags";
+import { scheduleFollowupsNode } from "@/agents/outreach/nodes/schedule_followups";
+
+/** 2-second gap between Resend API calls — stays well under the 10 req/sec Pro
+ *  limit and avoids 429s on Free (1 req/sec) plans. */
+const RESEND_PACE_MS = 2_000;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Max opener emails sent per campaign per cron tick.
+ *  3 per tick × 6 ticks/hour = 18/hour → 130 leads drain in ~7 hours within
+ *  one business day window. Anti-spam, anti-rate-limit safe. */
+const OPENERS_PER_CAMPAIGN_PER_TICK = 3;
 
 // Opener-spirited fallbacks when AI is unavailable. Distinct per step so a
 // lead's sequence isn't three identical strings. No pitch / no CTA.
@@ -63,6 +75,176 @@ export async function POST(req: NextRequest) {
 
   const now = new Date();
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // SECTION 1: Automatic opener dispatch for active campaigns
+  // Runs first so new leads start receiving emails without manual intervention.
+  // Only touches leads with state="discovered" — already-contacted leads are
+  // never re-sent an opener.
+  // ─────────────────────────────────────────────────────────────────────────
+  const activeCampaignsForOpeners = await db.campaign.findMany({
+    where: { status: "active", autoSend: true, deletedAt: null },
+    include: { offers: true },
+  });
+
+  let totalOpenersSent = 0;
+
+  for (const campaign of activeCampaignsForOpeners) {
+    const { isoDay, localTime } = getTimeInTimezone(now, campaign.timezone ?? "America/New_York");
+
+    // Respect send window — skip this campaign if outside hours or excluded day
+    if (campaign.sendDays?.length && !campaign.sendDays.includes(isoDay)) continue;
+    if (
+      campaign.sendWindowStart &&
+      campaign.sendWindowEnd &&
+      (localTime < campaign.sendWindowStart || localTime >= campaign.sendWindowEnd)
+    ) continue;
+
+    const settings = await getSystemSettings(campaign.orgId);
+    if (!settings.resendApiKey || !settings.fromEmail) continue;
+
+    const resend = new Resend(settings.resendApiKey);
+    const from = settings.fromName
+      ? `${settings.fromName} <${settings.fromEmail}>`
+      : settings.fromEmail;
+
+    const dayStart = new Date(now);
+    dayStart.setUTCHours(0, 0, 0, 0);
+
+    const dailyCap = settings.dailySendLimit ?? 100;
+    const perCampaignCap = settings.perCampaignDailyLimit ?? 50;
+
+    const orgSentTodayCount = await db.message.count({
+      where: { direction: "outbound", sentAt: { gte: dayStart }, lead: { orgId: campaign.orgId } },
+    });
+    if (orgSentTodayCount >= dailyCap) continue;
+
+    const campaignSentTodayCount = await db.message.count({
+      where: { direction: "outbound", sentAt: { gte: dayStart }, lead: { campaignId: campaign.id } },
+    });
+    if (campaignSentTodayCount >= perCampaignCap) continue;
+
+    // Fetch up to OPENERS_PER_CAMPAIGN_PER_TICK leads not yet contacted
+    // (state = "discovered" guarantees no prior opener was sent)
+    const pendingLeads = await db.lead.findMany({
+      where: {
+        campaignId: campaign.id,
+        orgId: campaign.orgId,
+        deletedAt: null,
+        state: "discovered",
+        email: { not: null },
+      },
+      take: OPENERS_PER_CAMPAIGN_PER_TICK,
+      orderBy: { createdAt: "asc" },
+    });
+
+    if (pendingLeads.length === 0) continue;
+
+    // Pick the Step 1 template from campaign.sequenceSteps if configured
+    const rawSteps = campaign.sequenceSteps as any[];
+    const step1 = rawSteps?.find((s: any) => s.step === 1);
+    const enabledVariants = step1?.variants?.filter((v: any) => v.enabled) || [];
+
+    const defaultSubject = "{{firstname}}, quick question about {{companyname}}";
+    const defaultBody =
+      `Hi {{firstname}},\n\nNoticed {{companyname}} serves customers across ${campaign.location || "your area"}.\n\nDo you have an automated system that follows up with missed calls or after-hours inquiries?\n\nWe help local service businesses book more appointments with an AI voice & text agent. Happy to show you a 2-minute demo if it's relevant.\n\nBest,\nXpeedLab Team`;
+
+    let campaignOpenersSent = 0;
+
+    for (const lead of pendingLeads) {
+      if (!lead.email) continue;
+
+      const variant =
+        enabledVariants.length > 0
+          ? enabledVariants[campaignOpenersSent % enabledVariants.length]
+          : { subject: defaultSubject, body: defaultBody };
+
+      const leadData = {
+        firstname: lead.companyName.split(" ")[0] || "there",
+        companyname: lead.companyName,
+        website: lead.website || "",
+        category: lead.category || campaign.businessType || "Services",
+      };
+
+      const finalSubject = replaceMergeTags(variant.subject || defaultSubject, leadData);
+      const parsedBody = replaceMergeTags(variant.body || defaultBody, leadData);
+
+      const outbound = buildOutboundEmail({
+        bodyText: parsedBody,
+        signatureHtml: settings.signatureHtml,
+        signatureText: settings.signatureText || (settings.fromName ? `— ${settings.fromName}` : ""),
+      });
+
+      try {
+        const { data: sendData, error } = sendsDisabled()
+          ? dryRunSend(lead.email, finalSubject)
+          : await resend.emails.send({
+              from,
+              to: lead.email,
+              subject: finalSubject,
+              html: outbound.html,
+              text: outbound.text,
+            });
+
+        if (error) {
+          console.error(`[cron/opener] Failed ${lead.email}:`, error.message);
+          continue;
+        }
+
+        await Promise.all([
+          db.message.create({
+            data: {
+              leadId: lead.id,
+              direction: "outbound",
+              subject: finalSubject,
+              body: outbound.bodyText,
+              bodyHtml: outbound.bodyHtml,
+              resendId: sendData?.id ?? null,
+              deliveryStatus: "sent",
+            },
+          }),
+          db.lead.update({
+            where: { id: lead.id },
+            data: { state: "contacted", lastTouchedAt: new Date() },
+          }),
+        ]);
+
+        // Schedule follow-ups (+3d, +5d) for this lead
+        await scheduleFollowupsNode({ leadId: lead.id } as any);
+
+        await logActivity({
+          orgId: campaign.orgId,
+          type: "opener_sent",
+          leadId: lead.id,
+          campaignId: campaign.id,
+          summary: `Auto-sent opener to ${lead.companyName} (${lead.email})`,
+        });
+
+        campaignOpenersSent++;
+        totalOpenersSent++;
+
+        // Pace between sends — 2 seconds keeps us well inside Resend rate limits
+        if (campaignOpenersSent < pendingLeads.length) {
+          await sleep(RESEND_PACE_MS);
+        }
+      } catch (e: any) {
+        console.error(`[cron/opener] Exception for lead ${lead.id}:`, e);
+      }
+    }
+
+    if (campaignOpenersSent > 0 && settings.telegramChatId) {
+      const remaining = await db.lead.count({
+        where: { campaignId: campaign.id, orgId: campaign.orgId, deletedAt: null, state: "discovered", email: { not: null } },
+      });
+      await sendTelegramMessage(
+        settings.telegramChatId,
+        `📧 <b>Auto-sent ${campaignOpenersSent} opener${campaignOpenersSent === 1 ? "" : "s"}</b> for "${campaign.name}"\n${remaining} leads remaining in queue.`,
+      ).catch(() => {});
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SECTION 2: Follow-up jobs (followup_2 / followup_3 / followup_4)
+  // ─────────────────────────────────────────────────────────────────────────
   const jobs = await db.job.findMany({
     where: {
       status: "pending",
@@ -314,6 +496,9 @@ export async function POST(req: NextRequest) {
           summary: `Sent follow-up #${followupNum} to ${lead.companyName}`,
         });
 
+        // Pace between follow-up sends too
+        await sleep(RESEND_PACE_MS);
+
         lastSentAt = Date.now();
         orgSentToday++;
         campaignSentToday.set(lead.campaignId, (campaignSentToday.get(lead.campaignId) ?? 0) + 1);
@@ -378,7 +563,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, processed, failed, total: jobs.length });
+  return NextResponse.json({
+    ok: true,
+    openersSent: totalOpenersSent,
+    processed,
+    failed,
+    total: jobs.length,
+  });
 }
 
 // Allow GET for easy manual triggering from browser during dev

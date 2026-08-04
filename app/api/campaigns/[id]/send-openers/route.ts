@@ -9,6 +9,10 @@ import { sendsDisabled, dryRunSend } from "@/lib/email/guard";
 import { logActivity } from "@/lib/activity";
 import { scheduleFollowupsNode } from "@/agents/outreach/nodes/schedule_followups";
 
+/** 2 seconds between sends — safe for Resend Free (1 req/s) and Pro (10 req/s). */
+const RESEND_PACE_MS = 2_000;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> }
@@ -133,6 +137,13 @@ export async function POST(
       } as any);
 
       sentCount++;
+
+      // Pace between sends — 2 seconds stays inside Resend rate limits on all plans.
+      // A 10-email batch takes ~20s total, which is expected. A loading state
+      // should be shown in the UI while this request is in flight.
+      if (sentCount < pendingLeads.length) {
+        await sleep(RESEND_PACE_MS);
+      }
     } catch (e: any) {
       console.error(`[send-openers] Exception sending to ${lead.email}:`, e);
     }
