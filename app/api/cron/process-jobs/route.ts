@@ -180,6 +180,7 @@ export async function POST(req: NextRequest) {
           : await resend.emails.send({
               from,
               to: lead.email,
+              replyTo: settings.replyToEmail || undefined,
               subject: finalSubject,
               html: outbound.html,
               text: outbound.text,
@@ -470,6 +471,7 @@ export async function POST(req: NextRequest) {
           : await resend.emails.send({
               from,
               to: lead.email,
+              replyTo: settings.replyToEmail || undefined,
               subject: finalSubject,
               html: outbound.html,
               text: outbound.text,

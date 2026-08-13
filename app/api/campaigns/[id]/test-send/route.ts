@@ -115,6 +115,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       const { error } = await resend.emails.send({
         from,
         to: targetEmail,
+        replyTo: settings.replyToEmail || undefined,
         subject: finalSubject,
         html: outbound.html,
         text: outbound.text,

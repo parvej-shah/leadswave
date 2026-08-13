@@ -102,6 +102,7 @@ export async function POST(
         : await resend.emails.send({
             from,
             to: lead.email,
+            replyTo: settings.replyToEmail || undefined,
             subject: finalSubject,
             html: outbound.html,
             text: outbound.text,

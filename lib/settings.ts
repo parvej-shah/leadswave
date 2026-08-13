@@ -8,6 +8,7 @@ export type SystemSettings = {
   offerText: string;
   fromEmail: string;
   fromName: string;
+  replyToEmail: string;
   signatureHtml: string;
   signatureText: string;
   resendApiKey: string;
@@ -56,6 +57,7 @@ export async function getSystemSettings(orgId: string): Promise<SystemSettings> 
     offerText: dbSettings?.offerText || process.env.OFFER_TEXT || "",
     fromEmail: dbSettings?.fromEmail || env.FROM_EMAIL || "",
     fromName: dbSettings?.fromName || env.FROM_NAME || "",
+    replyToEmail: dbSettings?.replyToEmail || env.REPLY_TO_EMAIL || "hello@getminions.ai",
     signatureHtml: dbSettings?.signatureHtml || "",
     signatureText: dbSettings?.signatureText || "",
     resendApiKey: decryptSecret(dbSettings?.resendApiKey) || env.RESEND_API_KEY || "",

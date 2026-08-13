@@ -213,6 +213,7 @@ model Settings {
   offerText            String?
   fromEmail            String?
   fromName             String?
+  replyToEmail         String?  // custom reply-to address (e.g. hello@getminions.ai)
   signatureHtml        String?  // reusable email signature (rich text); appended at send-time
   signatureText        String?  // plain-text fallback for the text/* part + WhatsApp
   resendApiKey         String?
