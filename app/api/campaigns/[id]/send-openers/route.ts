@@ -6,6 +6,7 @@ import { Resend } from "resend";
 import { replaceMergeTags } from "@/lib/email/template-tags";
 import { buildOutboundEmail } from "@/lib/email/signature";
 import { sendsDisabled, dryRunSend } from "@/lib/email/guard";
+import { sendOutboundEmail } from "@/lib/email/send";
 import { logActivity } from "@/lib/activity";
 import { scheduleFollowupsNode } from "@/agents/outreach/nodes/schedule_followups";
 
@@ -97,40 +98,25 @@ export async function POST(
     });
 
     try {
-      const { data: sendData, error } = sendsDisabled()
-        ? dryRunSend(lead.email, finalSubject)
-        : await resend.emails.send({
-            from,
+      const result = sendsDisabled()
+        ? { success: true, messageId: "dry-run" }
+        : await sendOutboundEmail({
+            orgId: org.orgId,
+            campaignId: campaign.id,
+            leadId: lead.id,
             to: lead.email,
-            replyTo: settings.replyToEmail || undefined,
             subject: finalSubject,
             html: outbound.html,
             text: outbound.text,
           });
 
-      if (error) {
-        console.error(`[send-openers] Failed to send to ${lead.email}:`, error.message);
+      if (!result.success) {
+        console.error(`[send-openers] Failed to send to ${lead.email}:`, result.error);
+        if (result.quotaExhausted) {
+          break; // Stop loop if daily quota reached
+        }
         continue;
       }
-
-      // Record message & update lead state to contacted
-      await Promise.all([
-        db.message.create({
-          data: {
-            leadId: lead.id,
-            direction: "outbound",
-            subject: finalSubject,
-            body: outbound.bodyText,
-            bodyHtml: outbound.bodyHtml,
-            resendId: sendData?.id ?? null,
-            deliveryStatus: "sent",
-          },
-        }),
-        db.lead.update({
-          where: { id: lead.id },
-          data: { state: "contacted", lastTouchedAt: new Date() },
-        }),
-      ]);
 
       // Automatically schedule follow-up jobs (e.g. followup_2 at +3 days, followup_3 at +5 days)
       await scheduleFollowupsNode({

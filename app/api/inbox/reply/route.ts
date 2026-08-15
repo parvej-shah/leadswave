@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { Resend } from "resend";
 import { getSystemSettings } from "@/lib/settings";
 import { requireOrg, tenantErrorResponse } from "@/lib/tenant";
 import { buildOutboundEmail } from "@/lib/email/signature";
 import { sendsDisabled, dryRunSend } from "@/lib/email/guard";
+import { sendOutboundEmail } from "@/lib/email/send";
 
 export async function POST(req: NextRequest) {
   let ctx;
@@ -25,10 +25,6 @@ export async function POST(req: NextRequest) {
 
   if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
   if (!lead.email) return NextResponse.json({ error: "Lead has no email" }, { status: 400 });
-  if (!settings?.resendApiKey)
-    return NextResponse.json({ error: "Resend API key not configured" }, { status: 400 });
-  if (!settings?.fromEmail)
-    return NextResponse.json({ error: "From email not configured" }, { status: 400 });
 
   // Find original outbound subject for Re: threading
   const firstOutbound = await db.message.findFirst({
@@ -38,11 +34,6 @@ export async function POST(req: NextRequest) {
   });
   const subject = firstOutbound?.subject ? `Re: ${firstOutbound.subject}` : "Re: Follow-up";
 
-  const resend = new Resend(settings.resendApiKey);
-  const from = settings.fromName
-    ? `${settings.fromName} <${settings.fromEmail}>`
-    : settings.fromEmail;
-
   const outbound = buildOutboundEmail({
     bodyHtml,
     bodyText: body,
@@ -50,29 +41,21 @@ export async function POST(req: NextRequest) {
     signatureText: settings.signatureText,
   });
 
-  const { data: sendData, error } = sendsDisabled()
-    ? dryRunSend(lead.email, subject)
-    : await resend.emails.send({
-        from,
+  const result = sendsDisabled()
+    ? { success: true, messageId: "dry-run" }
+    : await sendOutboundEmail({
+        orgId: ctx.orgId,
+        campaignId: lead.campaignId,
+        leadId: lead.id,
         to: lead.email,
         subject,
         html: outbound.html,
         text: outbound.text,
       });
 
-  if (error) return NextResponse.json({ error: error.message ?? "Send failed" }, { status: 502 });
-
-  await db.message.create({
-    data: {
-      leadId,
-      direction: "outbound",
-      subject,
-      body: outbound.bodyText,
-      bodyHtml: outbound.bodyHtml,
-      resendId: sendData?.id ?? null,
-      deliveryStatus: "sent",
-    },
-  });
+  if (!result.success) {
+    return NextResponse.json({ error: result.error ?? "Send failed" }, { status: 502 });
+  }
 
   await db.lead.update({
     where: { id: leadId },

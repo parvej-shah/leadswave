@@ -20,6 +20,7 @@ import { RichTextEditor } from "@/components/rich-text-editor";
 import { RichTextViewer } from "@/components/rich-text-viewer";
 import { htmlToPlainTextClient, stripUrls } from "@/lib/html/plain";
 import { TeamPanel } from "./team-panel";
+import { SenderInboxesPanel } from "./sender-inboxes-panel";
 
 type Settings = {
   offerText: string;
@@ -48,9 +49,10 @@ type Settings = {
   notifyEmailDigest: boolean;
 };
 
-type TabKey = "outreach" | "keys" | "calendar" | "limits" | "notifications" | "connection" | "team";
+type TabKey = "inboxes" | "outreach" | "keys" | "calendar" | "limits" | "notifications" | "connection" | "team";
 
 const TABS: { key: TabKey; label: string }[] = [
+  { key: "inboxes", label: "Sender Inboxes" },
   { key: "outreach", label: "Outreach" },
   { key: "keys", label: "API Keys" },
   { key: "calendar", label: "Calendar" },
@@ -668,10 +670,12 @@ export default function SettingsPage() {
           </Card>
         )}
 
+        {tab === "inboxes" && <SenderInboxesPanel />}
+
         {tab === "team" && <TeamPanel />}
 
-        {/* Save bar (team tab manages itself — no form fields to save) */}
-        {tab !== "team" && (
+        {/* Save bar (inboxes and team tabs manage themselves — no form fields to save) */}
+        {tab !== "team" && tab !== "inboxes" && (
         <div className="flex items-center gap-3 pt-4 border-t border-border">
           <Button type="submit" disabled={saving || !isDirty} iconStart={saving ? "refresh" : undefined}>
             {saving ? "Saving…" : "Save Changes"}

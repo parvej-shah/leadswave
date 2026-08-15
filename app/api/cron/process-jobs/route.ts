@@ -8,6 +8,7 @@ import { buildOutboundEmail } from "@/lib/email/signature";
 import { stripSignature } from "@/lib/html/plain";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { sendsDisabled, dryRunSend } from "@/lib/email/guard";
+import { sendOutboundEmail } from "@/lib/email/send";
 import { getSystemSettings } from "@/lib/settings";
 import { logActivity, logError } from "@/lib/activity";
 import { replaceMergeTags } from "@/lib/email/template-tags";
@@ -175,39 +176,25 @@ export async function POST(req: NextRequest) {
       });
 
       try {
-        const { data: sendData, error } = sendsDisabled()
-          ? dryRunSend(lead.email, finalSubject)
-          : await resend.emails.send({
-              from,
+        const result = sendsDisabled()
+          ? { success: true, messageId: "dry-run" }
+          : await sendOutboundEmail({
+              orgId: campaign.orgId,
+              campaignId: campaign.id,
+              leadId: lead.id,
               to: lead.email,
-              replyTo: settings.replyToEmail || undefined,
               subject: finalSubject,
               html: outbound.html,
               text: outbound.text,
             });
 
-        if (error) {
-          console.error(`[cron/opener] Failed ${lead.email}:`, error.message);
+        if (!result.success) {
+          console.error(`[cron/opener] Failed ${lead.email}:`, result.error);
+          if (result.quotaExhausted) {
+            break;
+          }
           continue;
         }
-
-        await Promise.all([
-          db.message.create({
-            data: {
-              leadId: lead.id,
-              direction: "outbound",
-              subject: finalSubject,
-              body: outbound.bodyText,
-              bodyHtml: outbound.bodyHtml,
-              resendId: sendData?.id ?? null,
-              deliveryStatus: "sent",
-            },
-          }),
-          db.lead.update({
-            where: { id: lead.id },
-            data: { state: "contacted", lastTouchedAt: new Date() },
-          }),
-        ]);
 
         // Schedule follow-ups (+3d, +5d) for this lead
         await scheduleFollowupsNode({ leadId: lead.id } as any);
@@ -466,29 +453,21 @@ export async function POST(req: NextRequest) {
       });
 
       try {
-        const { data: sendData, error } = sendsDisabled()
-          ? dryRunSend(lead.email, finalSubject)
-          : await resend.emails.send({
-              from,
+        const result = sendsDisabled()
+          ? { success: true, messageId: "dry-run" }
+          : await sendOutboundEmail({
+              orgId,
+              campaignId: lead.campaignId,
+              leadId: lead.id,
               to: lead.email,
-              replyTo: settings.replyToEmail || undefined,
               subject: finalSubject,
               html: outbound.html,
               text: outbound.text,
             });
 
-        if (error) throw new Error(error.message);
+        if (!result.success) throw new Error(result.error || "Failed to send follow-up");
 
-        await Promise.all([
-          db.message.create({
-            data: { leadId: lead.id, direction: "outbound", subject: finalSubject, body: outbound.bodyText, bodyHtml: outbound.bodyHtml, resendId: sendData?.id ?? null, deliveryStatus: "sent" },
-          }),
-          db.lead.update({
-            where: { id: lead.id },
-            data: { state: "contacted", lastTouchedAt: new Date() },
-          }),
-          db.job.update({ where: { id: job.id }, data: { status: "done" } }),
-        ]);
+        await db.job.update({ where: { id: job.id }, data: { status: "done" } });
 
         await logActivity({
           orgId,

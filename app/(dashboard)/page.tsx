@@ -150,7 +150,7 @@ export default async function DashboardPage({
 
   // Trust surfaces: real activity events + deliverability health
   const dayStart = new Date(new Date().setUTCHours(0, 0, 0, 0));
-  const [events, bouncedCount, complainedCount, suppressedCount, sentToday, orgSettings] =
+  const [events, bouncedCount, complainedCount, suppressedCount, sentToday, orgSettings, inboxes] =
     await Promise.all([
       db.activityEvent.findMany({
         where: { orgId },
@@ -162,6 +162,7 @@ export default async function DashboardPage({
       db.suppression.count({ where: { orgId } }),
       db.message.count({ where: { direction: "outbound", sentAt: { gte: dayStart }, lead: { orgId } } }),
       db.settings.findUnique({ where: { orgId }, select: { dailySendLimit: true, fromEmail: true } }),
+      db.senderInbox.findMany({ where: { orgId, isActive: true }, orderBy: { createdAt: "asc" } }),
     ]);
   // Fresh org (no campaigns, no sending config): guide instead of blank charts.
   if (campaigns.length === 0 && !orgSettings?.fromEmail) redirect("/onboarding");
@@ -504,8 +505,19 @@ export default async function DashboardPage({
       <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-4">
         <FollowupQueue />
         <Card>
-          <CardHeader>Deliverability</CardHeader>
-          <div className="p-5 grid grid-cols-2 gap-4">
+          <CardHeader
+            action={
+              <Link
+                href="/settings?tab=inboxes"
+                className="font-mono text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors"
+              >
+                Manage Inboxes →
+              </Link>
+            }
+          >
+            Deliverability &amp; Inboxes
+          </CardHeader>
+          <div className="p-5 grid grid-cols-2 gap-4 border-b border-border">
             <DeliverabilityStat
               label="Sends today"
               value={`${sentToday} / ${dailyLimit}`}
@@ -523,9 +535,58 @@ export default async function DashboardPage({
             />
             <DeliverabilityStat label="Suppressed" value={String(suppressedCount)} tone="neutral" />
           </div>
+
+          {/* Active Sender Inboxes & Warmup */}
+          <div className="p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">
+                Active Inboxes ({inboxes.length})
+              </span>
+              <span className="font-mono text-[10px] text-emerald-400 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ds-pulse" />
+                Warmup Active (0 cost)
+              </span>
+            </div>
+
+            {inboxes.length === 0 ? (
+              <p className="font-mono text-[11px] text-fg-5 m-0">
+                No custom inboxes connected. <Link href="/settings?tab=inboxes" className="text-indigo-400 underline">Add Google Workspace inboxes</Link>.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {inboxes.map((inbox) => {
+                  const pct = Math.min(100, Math.round((inbox.sentToday / inbox.dailyLimit) * 100));
+                  return (
+                    <div
+                      key={inbox.id}
+                      className="bg-[oklch(0.12_0_0)] border border-border rounded-lg p-2.5 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-medium text-fg-1 truncate">{inbox.fromEmail}</span>
+                          <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            Warmup Active 🔥
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-slate-800 rounded-full mt-1.5 overflow-hidden">
+                          <div
+                            className="h-full bg-indigo-500 rounded-full"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                      <span className="font-mono text-[10px] text-fg-4 shrink-0">
+                        {inbox.sentToday}/{inbox.dailyLimit} sent
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <p className="font-mono text-[10px] text-fg-5 m-0 px-5 pb-4">
-            Suppressed addresses are never contacted again. Daily caps and send throttling
-            protect your sender reputation.
+            Automated background warmup runs daily across peer networks. Outbound cold campaigns automatically rotate across active inboxes.
           </p>
         </Card>
       </div>

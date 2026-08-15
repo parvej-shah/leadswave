@@ -28,6 +28,7 @@ model Organization {
   billingStatus      String       @default("active")
   memberships        Membership[]
   invites            Invite[]
+  inboxes            SenderInbox[]
   createdAt          DateTime     @default(now())
 }
 
@@ -85,6 +86,8 @@ model Campaign {
   opportunitiesValue Float   @default(0)
   conversionsValue   Float   @default(0)
   sequenceSteps      Json?   // Structured sequence steps & variants
+  senderInboxId      String?
+  senderInbox        SenderInbox? @relation(fields: [senderInboxId], references: [id])
   leads          Lead[]
   offers         CampaignOffer[]
   createdAt      DateTime  @default(now())
@@ -177,6 +180,8 @@ model Message {
   body           String   // canonical plain text: thread previews, AI follow-up context, search
   bodyHtml       String?  // rich-text rendering (replies/follow-ups); null for plain/AI-generated
   resendId       String?  // Resend email ID for webhook correlation
+  senderInboxId  String?  // SenderInbox ID if sent via SMTP
+  senderInbox    SenderInbox? @relation(fields: [senderInboxId], references: [id])
   deliveryStatus String?  // sent | delivered | opened | bounced | complained
   sentAt         DateTime @default(now())
   lead           Lead     @relation(fields: [leadId], references: [id])
@@ -272,3 +277,31 @@ model PendingConfirmation {
   status      String   @default("pending") // pending | confirmed | skipped
   createdAt   DateTime @default(now())
 }
+
+model SenderInbox {
+  id                String       @id @default(cuid())
+  orgId             String
+  name              String       // e.g. "Hello - withminions.com"
+  fromEmail         String       // hello@withminions.com
+  fromName          String       // Rakib from Minions.AI
+  replyToEmail      String?      // Optional override
+  smtpHost          String       @default("smtp.gmail.com")
+  smtpPort          Int          @default(465)
+  smtpUser          String       // hello@withminions.com
+  smtpPassEncrypted String       // AES-256 encrypted password
+  smtpSecure        Boolean      @default(true) // SSL/TLS
+  isActive          Boolean      @default(true)
+  dailyLimit        Int          @default(30)
+  sentToday         Int          @default(0)
+  lastResetAt       DateTime     @default(now())
+  warmupStatus      String       @default("active") // active | completed | inactive
+  org               Organization @relation(fields: [orgId], references: [id])
+  campaigns         Campaign[]
+  messages          Message[]
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@unique([orgId, fromEmail])
+  @@index([orgId])
+}
+

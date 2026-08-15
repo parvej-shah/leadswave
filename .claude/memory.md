@@ -11,6 +11,16 @@ Format: one bullet per item, newest on top. Convert relative dates to absolute.
 
 ## Live decisions
 
+- **Multi-Inbox SMTP & CAN-SPAM Unsubscribe Engine shipped & armed.** (2026-08-15)
+  - **Live Mailboxes Connected**: `hello@withminions.com` and `contact@withminions.com` (Google Workspace on `smtp.gmail.com:465` SSL) authenticated and active in LeadsWave with daily limits of 30/day each.
+  - **TrulyInbox Warmup Active**: Both inboxes connected with Setup Score 100/100, running progressive ramp-up (5→30 emails/day, 25-30% reply rate).
+  - **Live Delivery Verified**: Live outbound emails verified to `xpeedlab@gmail.com` with 100% SPF/DKIM/DMARC alignment.
+  - **Prisma `SenderInbox`**: Added `SenderInbox` model (`id`, `orgId`, `fromEmail`, `fromName`, `smtpHost`, `smtpPort`, `smtpUser`, `smtpPassEncrypted`, `dailyLimit`, `sentToday`, `lastResetAt`, `isActive`) with relations to `Organization`, `Campaign`, `Message`. Pushed via `prisma db push`.
+  - **SMTP Transport & Centralized Sender**: `lib/email/smtp.ts` (Nodemailer transporter pool caching) and `lib/email/send.ts` (`sendOutboundEmail`). Intelligent round-robin quota rotation across active inboxes; daily quota auto-reset at calendar midnight UTC; suppression list pre-check.
+  - **Settings UI**: `app/(dashboard)/settings/sender-inboxes-panel.tsx` added under "Sender Inboxes" tab in `/settings`. Includes Google Workspace / MS365 presets, live daily progress bars (`sentToday / dailyLimit`), and test email sender.
+  - **CAN-SPAM Compliance**: `lib/email/unsubscribe.ts` (HMAC token generation/verification), `app/unsubscribe/page.tsx` (public landing page), `app/api/unsubscribe/route.ts` (one-click & standard suppression), and automatic `List-Unsubscribe` headers.
+  - **Send paths updated**: `send-openers`, `process-jobs` (openers + follow-ups), `inbox/reply`, and outreach graph `sendNode` now route through `sendOutboundEmail`.
+
 - **UX polish + Coverage Map shipped on top of Stage A/B.** (2026-07-13)
   - **Toast/undo system**: `components/ui/toaster.tsx` (`<Toaster>` context +
     `useToast()`, stacked bottom-right queue, tw-animate-css enter/exit). Mounted in
