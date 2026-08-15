@@ -35,6 +35,7 @@ import {
   MapPin,
   Layers,
   AlertTriangle,
+  Mail,
   type LucideIcon,
 } from "lucide-react";
 
@@ -75,6 +76,7 @@ export const iconMap = {
   map: MapPin,
   layers: Layers,
   alert: AlertTriangle,
+  mail: Mail,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof iconMap;

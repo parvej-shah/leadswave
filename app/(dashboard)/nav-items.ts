@@ -11,6 +11,7 @@ export type NavItem = {
 export const NAV: NavItem[] = [
   { href: "/", label: "Dashboard", icon: "home", kbd: "G D", match: (p) => p === "/" },
   { href: "/campaigns", label: "Campaigns", icon: "target", kbd: "G C", match: (p) => p.startsWith("/campaigns") },
+  { href: "/email-accounts", label: "Email Accounts", icon: "mail", kbd: "G E", match: (p) => p.startsWith("/email-accounts") },
   { href: "/business-types", label: "Business Types", icon: "layers", kbd: "G T", match: (p) => p.startsWith("/business-types") },
   { href: "/leads", label: "Leads", icon: "users", kbd: "G L", match: (p) => p.startsWith("/leads") },
   { href: "/map", label: "Coverage Map", icon: "map", kbd: "G M", match: (p) => p.startsWith("/map") },

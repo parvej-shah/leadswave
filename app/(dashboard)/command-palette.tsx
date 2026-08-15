@@ -114,6 +114,15 @@ export function CommandPalette({ campaigns }: CommandPaletteProps) {
         run: () => router.push("/campaigns"),
       },
       {
+        id: "nav-email-accounts",
+        label: "Go to Email Accounts",
+        hint: "Sender inboxes & warmup",
+        icon: "mail",
+        kbd: "G E",
+        group: "Navigate",
+        run: () => router.push("/email-accounts"),
+      },
+      {
         id: "nav-leads",
         label: "Go to Leads",
         hint: "All leads table",
