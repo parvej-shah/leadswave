@@ -105,34 +105,34 @@ export async function POST(req: NextRequest) {
     orderBy: { lastTouchedAt: "desc" },
   });
 
-  if (candidates.length === 0) {
-    console.log(`[inbound] No lead found for ${fromEmail} — ignoring`);
-    return NextResponse.json({ ok: true, skipped: true });
-  }
+  let lead: typeof candidates[0] | null = candidates.length > 0 ? candidates[0] : null;
 
-  let lead = candidates[0];
-  const distinctOrgs = new Set(candidates.map((l) => l.orgId));
-  if (distinctOrgs.size > 1) {
-    const toAddresses = (Array.isArray(email.to) ? email.to : [email.to ?? ""])
-      .map((a) => extractEmail(a ?? ""))
-      .filter(Boolean);
-    const orgSettings = await db.settings.findMany({
-      where: { orgId: { in: [...distinctOrgs] as string[] }, fromEmail: { not: null } },
-      select: { orgId: true, fromEmail: true },
-    });
-    const matchedOrg = orgSettings.find(
-      (s) => s.fromEmail && toAddresses.includes(s.fromEmail.toLowerCase()),
-    )?.orgId;
-    if (matchedOrg) {
-      lead = candidates.find((l) => l.orgId === matchedOrg) ?? lead;
-    } else {
-      console.warn(
-        `[inbound] Ambiguous sender ${fromEmail} across ${distinctOrgs.size} orgs; using most recently touched lead ${lead.id}`,
-      );
+  if (candidates.length > 1) {
+    const distinctOrgs = new Set(candidates.map((l) => l.orgId));
+    if (distinctOrgs.size > 1) {
+      const toAddresses = (Array.isArray(email.to) ? email.to : [email.to ?? ""])
+        .map((a) => extractEmail(a ?? ""))
+        .filter(Boolean);
+      const orgSettings = await db.settings.findMany({
+        where: { orgId: { in: [...distinctOrgs] as string[] }, fromEmail: { not: null } },
+        select: { orgId: true, fromEmail: true },
+      });
+      const matchedOrg = orgSettings.find(
+        (s) => s.fromEmail && toAddresses.includes(s.fromEmail.toLowerCase()),
+      )?.orgId;
+      if (matchedOrg) {
+        lead = candidates.find((l) => l.orgId === matchedOrg) ?? lead;
+      } else {
+        console.warn(
+          `[inbound] Ambiguous sender ${fromEmail} across ${distinctOrgs.size} orgs; using most recently touched lead ${lead?.id}`,
+        );
+      }
     }
   }
 
-  const settings = await getSystemSettings(lead.orgId!);
+  const defaultOrgId = (await db.organization.findFirst({ select: { id: true } }))?.id || "org_default";
+  const orgId = lead?.orgId || defaultOrgId;
+  const settings = await getSystemSettings(orgId);
 
   // Resend receiving webhooks may include metadata only.
   // If body is empty, fetch the full receiving-email record via Resend API.
@@ -157,68 +157,71 @@ export async function POST(req: NextRequest) {
   }
 
   body = stripQuotedReply(body);
-  console.log(`[inbound] from=${fromEmail} subject="${subject}" in-reply-to=${inReplyTo} bodyLen=${body.length} org=${lead.orgId}`);
+  console.log(`[inbound] from=${fromEmail} subject="${subject}" in-reply-to=${inReplyTo} bodyLen=${body.length} org=${orgId} leadId=${lead?.id ?? "none"}`);
 
   if (!body) {
-    console.warn(`[inbound] Empty body for lead ${lead.id}; skipping save/classification to avoid false state updates`);
-    return NextResponse.json({ ok: true, classified: false, leadId: lead.id, reason: "empty_body" });
+    console.warn(`[inbound] Empty body for sender ${fromEmail}; skipping save/classification`);
+    return NextResponse.json({ ok: true, classified: false, reason: "empty_body" });
   }
 
-  // Save inbound message only when we have meaningful content.
-  await db.message.create({
-    data: {
-      leadId: lead.id,
-      direction: "inbound",
-      subject,
-      body,
-    },
-  });
+  // Send a copy of the reply/inbound email to xpeedlab@gmail.com so it lands in your Gmail inbox as well
+  if (settings.resendApiKey && settings.fromEmail) {
+    try {
+      const resend = new Resend(settings.resendApiKey);
+      const from = settings.fromName ? `${settings.fromName} <${settings.fromEmail}>` : settings.fromEmail;
+      const forwardTo = "xpeedlab@gmail.com";
+      const appUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+      const leadTitle = lead ? `[Lead Reply] ${lead.companyName}` : `[Inbound Reply] ${fromEmail}`;
 
-  try {
-    await inboxGraph.invoke({
-      leadId: lead.id,
-      inboundEmail: { from: fromEmail, subject, body, inReplyTo },
-      anthropicApiKey: settings.anthropicApiKey ?? "",
-      telegramChatId: settings.telegramChatId ?? "",
-      notifyHotOnly: settings.notifyHotOnly ?? false,
-    });
-    console.log(`[inbound] Inbox agent completed for lead ${lead.id}`);
-
-    // Send a copy of the reply to xpeedlab@gmail.com so it lands in your Gmail inbox as well
-    if (settings.resendApiKey && settings.fromEmail) {
-      try {
-        const resend = new Resend(settings.resendApiKey);
-        const from = settings.fromName ? `${settings.fromName} <${settings.fromEmail}>` : settings.fromEmail;
-        const forwardTo = "xpeedlab@gmail.com";
-        const appUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
-
-        await resend.emails.send({
-          from,
-          to: forwardTo,
-          subject: `[Lead Reply] ${lead.companyName}: ${subject}`,
-          html: `
-            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #0f172a; color: #f8fafc;">
-              <h2 style="color: #38bdf8; margin-top: 0; font-size: 20px;">📬 New Lead Reply Received</h2>
-              <div style="margin-bottom: 16px; font-size: 14px; color: #94a3b8;">
-                <p style="margin: 4px 0;"><strong style="color: #f1f5f9;">Lead:</strong> ${lead.companyName}</p>
-                <p style="margin: 4px 0;"><strong style="color: #f1f5f9;">From:</strong> ${fromEmail}</p>
-                <p style="margin: 4px 0;"><strong style="color: #f1f5f9;">Subject:</strong> ${subject}</p>
-              </div>
-              <div style="background: #1e293b; padding: 16px; border-radius: 8px; border-left: 4px solid #38bdf8; white-space: pre-wrap; font-size: 14px; line-height: 1.6; color: #e2e8f0; margin-bottom: 20px;">${body}</div>
-              <a href="${appUrl}/inbox" style="display: inline-block; background: #2563eb; color: #ffffff; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">Open in LeadsWave Inbox &rarr;</a>
+      await resend.emails.send({
+        from,
+        to: forwardTo,
+        subject: `${leadTitle}: ${subject}`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #0f172a; color: #f8fafc;">
+            <h2 style="color: #38bdf8; margin-top: 0; font-size: 20px;">📬 ${lead ? "New Lead Reply Received" : "New Inbound Reply Received"}</h2>
+            <div style="margin-bottom: 16px; font-size: 14px; color: #94a3b8;">
+              ${lead ? `<p style="margin: 4px 0;"><strong style="color: #f1f5f9;">Lead:</strong> ${lead.companyName}</p>` : ""}
+              <p style="margin: 4px 0;"><strong style="color: #f1f5f9;">From:</strong> ${fromEmail}</p>
+              <p style="margin: 4px 0;"><strong style="color: #f1f5f9;">Subject:</strong> ${subject}</p>
             </div>
-          `,
-          text: `New Lead Reply from ${lead.companyName} (${fromEmail}):\n\nSubject: ${subject}\n\n${body}\n\nView in LeadsWave Inbox: ${appUrl}/inbox`,
-        });
-        console.log(`[inbound] Sent email copy of reply to ${forwardTo}`);
-      } catch (fwdErr) {
-        console.error("[inbound] Failed to send forward copy:", fwdErr);
-      }
+            <div style="background: #1e293b; padding: 16px; border-radius: 8px; border-left: 4px solid #38bdf8; white-space: pre-wrap; font-size: 14px; line-height: 1.6; color: #e2e8f0; margin-bottom: 20px;">${body}</div>
+            <a href="${appUrl}/inbox" style="display: inline-block; background: #2563eb; color: #ffffff; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">Open in LeadsWave Inbox &rarr;</a>
+          </div>
+        `,
+        text: `New Inbound Email from ${fromEmail}:\n\nSubject: ${subject}\n\n${body}\n\nView in LeadsWave Inbox: ${appUrl}/inbox`,
+      });
+      console.log(`[inbound] Sent email copy of reply to ${forwardTo}`);
+    } catch (fwdErr) {
+      console.error("[inbound] Failed to send forward copy:", fwdErr);
     }
-  } catch (err) {
-    console.error("[inbound] Inbox agent error:", err);
-    return NextResponse.json({ ok: true, classified: false, error: String(err) });
   }
 
-  return NextResponse.json({ ok: true, classified: true, leadId: lead.id });
+  // If this email belongs to a recognized lead in DB, record the message & process in Inbox AI graph.
+  if (lead) {
+    await db.message.create({
+      data: {
+        leadId: lead.id,
+        direction: "inbound",
+        subject,
+        body,
+      },
+    });
+
+    try {
+      await inboxGraph.invoke({
+        leadId: lead.id,
+        inboundEmail: { from: fromEmail, subject, body, inReplyTo },
+        anthropicApiKey: settings.anthropicApiKey ?? "",
+        telegramChatId: settings.telegramChatId ?? "",
+        notifyHotOnly: settings.notifyHotOnly ?? false,
+      });
+      console.log(`[inbound] Inbox agent completed for lead ${lead.id}`);
+    } catch (err) {
+      console.error("[inbound] Inbox agent error:", err);
+      return NextResponse.json({ ok: true, classified: false, error: String(err) });
+    }
+  }
+
+  return NextResponse.json({ ok: true, classified: Boolean(lead), leadId: lead?.id ?? null });
 }
