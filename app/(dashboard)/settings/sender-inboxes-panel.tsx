@@ -410,7 +410,7 @@ export function SenderInboxesPanel() {
               </Button>
             </div>
 
-            <form onSubmit={handleAddInbox} className="space-y-4 text-sm">
+            <div className="space-y-4 text-sm">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>Inbox Label</Label>
@@ -548,7 +548,11 @@ export function SenderInboxesPanel() {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={submitting}>
+                <Button
+                  type="button"
+                  onClick={handleAddInbox as any}
+                  disabled={submitting}
+                >
                   {submitting ? (
                     <>
                       <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
@@ -559,7 +563,7 @@ export function SenderInboxesPanel() {
                   )}
                 </Button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
