@@ -57,6 +57,9 @@ export default function EmailAccountsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingInbox, setEditingInbox] = useState<SenderInbox | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [trulyOverview, setTrulyOverview] = useState<{ totalAccounts?: number; activeWarmups?: number; avgSetupScore?: number } | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -100,8 +103,30 @@ export default function EmailAccountsPage() {
     }
   }
 
+  async function handleSyncTrulyInbox() {
+    setSyncing(true);
+    setError("");
+    try {
+      const res = await fetch("/api/settings/inboxes/sync", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTrulyOverview(data.trulyInboxOverview);
+        setLastSyncedAt(new Date().toLocaleTimeString());
+        setSuccessMsg(`Synced with TrulyInbox: ${data.matchedAccounts} account(s) active & warming.`);
+        await fetchInboxes();
+      } else {
+        throw new Error(data.error || "Sync failed");
+      }
+    } catch (err: any) {
+      console.warn("TrulyInbox sync warning:", err);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   useEffect(() => {
     fetchInboxes();
+    handleSyncTrulyInbox();
   }, []);
 
   function applyPreset(preset: "google" | "ms365") {
@@ -282,9 +307,27 @@ export default function EmailAccountsPage() {
             <div className="w-px h-4 bg-slate-800" />
             <div className="flex items-center gap-1.5 text-emerald-400">
               <Flame className="w-3.5 h-3.5 text-emerald-400" />
-              <span>{inboxes.length} Active in Warmup</span>
+              <span>{trulyOverview?.activeWarmups ?? inboxes.length} Active in Warmup</span>
             </div>
+            {lastSyncedAt && (
+              <>
+                <div className="w-px h-4 bg-slate-800" />
+                <span className="text-[10px] text-slate-500 font-mono">
+                  Synced: {lastSyncedAt}
+                </span>
+              </>
+            )}
           </div>
+
+          <Button
+            variant="secondary"
+            onClick={handleSyncTrulyInbox}
+            disabled={syncing}
+            className="flex items-center gap-1.5 text-xs"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-indigo-400 ${syncing ? "animate-spin" : ""}`} />
+            <span>{syncing ? "Syncing..." : "Sync TrulyInbox"}</span>
+          </Button>
 
           <Button
             onClick={() => {
