@@ -83,6 +83,16 @@ async function ensureUserAndOrg(params: {
   return { user, membership };
 }
 
+if (
+  process.env.NODE_ENV === "production" &&
+  (!process.env.AUTH_URL ||
+    process.env.AUTH_URL.includes("leadswave-eight.vercel.app") ||
+    process.env.NEXTAUTH_URL?.includes("leadswave-eight.vercel.app"))
+) {
+  process.env.AUTH_URL = "https://outreach.getminions.ai";
+  process.env.NEXTAUTH_URL = "https://outreach.getminions.ai";
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
@@ -106,6 +116,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      const canonicalBase =
+        baseUrl && !baseUrl.includes("leadswave-eight.vercel.app")
+          ? baseUrl
+          : "https://outreach.getminions.ai";
+      if (url.startsWith("/")) {
+        return `${canonicalBase}${url}`;
+      }
+      try {
+        const parsed = new URL(url);
+        if (
+          parsed.hostname.includes("getminions.ai") ||
+          parsed.hostname.includes("minions.ai") ||
+          parsed.hostname === "localhost"
+        ) {
+          return url;
+        }
+      } catch {}
+      return canonicalBase;
+    },
     async jwt({ token, account, profile }) {
       if (account) {
         token.accessToken = account.access_token;
