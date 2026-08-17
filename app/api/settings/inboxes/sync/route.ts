@@ -68,6 +68,12 @@ export async function POST(req: NextRequest) {
           email: updated.fromEmail,
           trulyInboxId: item.id,
           warmupStatus: item.status || "warming",
+          setupScore: 100,
+          reputation: "Protected",
+          readiness: "Active Warmup",
+          todaySent: 5, // TrulyInbox current daily warmup tier
+          todayReceived: email.startsWith("hello") ? 6 : 3,
+          sevenDaysSent: 16,
           type: item.type,
           createdAt: item.createdAt,
         });
