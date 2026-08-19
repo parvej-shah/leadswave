@@ -182,6 +182,25 @@ export async function sendOutboundEmail(
       email: normalizedEmail,
     });
 
+    // Ensure the message body has the inbox-specific signature & sender name
+    let finalHtml = params.html;
+    let finalText = params.text;
+
+    if (selectedInbox.fromName) {
+      if (finalText) {
+        finalText = finalText
+          .replace(/Rakibul Islam/g, selectedInbox.fromName)
+          .replace(/Rakib from Minions\.AI/g, selectedInbox.fromName)
+          .replace(/Parvej from Minions\.AI/g, selectedInbox.fromName);
+      }
+      if (finalHtml) {
+        finalHtml = finalHtml
+          .replace(/Rakibul Islam/g, selectedInbox.fromName)
+          .replace(/Rakib from Minions\.AI/g, selectedInbox.fromName)
+          .replace(/Parvej from Minions\.AI/g, selectedInbox.fromName);
+      }
+    }
+
     const headers: Record<string, string> = {
       "List-Unsubscribe": `<${unsubUrl}>, <mailto:${selectedInbox.fromEmail}?subject=unsubscribe>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
@@ -192,8 +211,8 @@ export async function sendOutboundEmail(
       const result = await sendViaSmtpTransport(inboxConfig, {
         to: normalizedEmail,
         subject: params.subject,
-        text: params.text,
-        html: params.html || undefined,
+        text: finalText,
+        html: finalHtml || undefined,
         headers,
       });
 
@@ -213,8 +232,8 @@ export async function sendOutboundEmail(
             direction: "outbound",
             senderInboxId: selectedInbox.id,
             subject: params.subject,
-            body: params.text,
-            bodyHtml: params.html || null,
+            body: finalText,
+            bodyHtml: finalHtml || null,
             deliveryStatus: "sent",
           },
         });

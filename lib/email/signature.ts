@@ -46,9 +46,17 @@ export function appendOpenerSignature(
   return sig ? `${cleanText}\n${SIGNATURE_DELIMITER}${sig}` : cleanText;
 }
 
+export function getSignatureForSender(fromName?: string | null, fromEmail?: string | null): { html: string; text: string } {
+  const name = fromName || (fromEmail?.toLowerCase().includes("contact") ? "Parvej from Minions.AI" : "Rakib from Minions.AI");
+  const html = `<p>Regards,<br /><strong>${escapeHtml(name)}</strong></p><p>Whatsapp: +8801755444807<br />Email: <a target="_blank" rel="noopener noreferrer" href="mailto:hello@getminions.ai">hello@getminions.ai</a></p><p><a target="_blank" rel="noopener noreferrer" href="https://www.getminions.ai">www.getminions.ai</a></p>`;
+  const text = `Regards,\n${name}\nWhatsapp: +8801755444807\nEmail: hello@getminions.ai\nwww.getminions.ai`;
+  return { html, text };
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 }
+
