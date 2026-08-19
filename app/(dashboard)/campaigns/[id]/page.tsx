@@ -576,6 +576,8 @@ export default function CampaignDetailPage() {
         <AnalyticsView
           status={campaign.status}
           stats={stats}
+          campaignId={id}
+          leads={leads}
           onOpenSettings={() => setActiveTab("options")}
           onRunOutreach={handleRunOutreach}
           runningOutreach={runningOutreach}
