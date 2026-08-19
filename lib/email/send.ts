@@ -4,6 +4,7 @@ import { sendViaSmtpTransport, type SmtpInboxConfig } from "./smtp";
 import { buildUnsubscribeUrl } from "./unsubscribe";
 import { resend } from "./client";
 import { getSystemSettings } from "@/lib/settings";
+import { getSignatureForSender } from "./signature";
 
 export type OutboundSendParams = {
   orgId: string;
@@ -182,22 +183,27 @@ export async function sendOutboundEmail(
       email: normalizedEmail,
     });
 
-    // Ensure the message body has the inbox-specific signature & sender name
+    // Ensure the message body has the exact inbox-specific signature & sender name
     let finalHtml = params.html;
     let finalText = params.text;
 
-    if (selectedInbox.fromName) {
-      if (finalText) {
-        finalText = finalText
-          .replace(/Rakibul Islam/g, selectedInbox.fromName)
-          .replace(/Rakib from Minions\.AI/g, selectedInbox.fromName)
-          .replace(/Parvej from Minions\.AI/g, selectedInbox.fromName);
+    const inboxSig = getSignatureForSender(selectedInbox.fromName, selectedInbox.fromEmail);
+
+    if (finalText) {
+      if (finalText.includes("Regards,")) {
+        const bodyBeforeSig = finalText.split(/Regards,/i)[0].trim();
+        finalText = `${bodyBeforeSig}\n\n${inboxSig.text}`;
+      } else {
+        finalText = `${finalText.trim()}\n\n${inboxSig.text}`;
       }
-      if (finalHtml) {
-        finalHtml = finalHtml
-          .replace(/Rakibul Islam/g, selectedInbox.fromName)
-          .replace(/Rakib from Minions\.AI/g, selectedInbox.fromName)
-          .replace(/Parvej from Minions\.AI/g, selectedInbox.fromName);
+    }
+
+    if (finalHtml) {
+      if (finalHtml.includes("<hr") || finalHtml.includes("Regards,")) {
+        const bodyHtmlBeforeSig = finalHtml.split(/<hr\s*\/?>/i)[0].split(/<p>Regards,/i)[0].trim();
+        finalHtml = `${bodyHtmlBeforeSig}<br/><hr/>${inboxSig.html}`;
+      } else {
+        finalHtml = `${finalHtml}<br/><hr/>${inboxSig.html}`;
       }
     }
 
