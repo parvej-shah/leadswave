@@ -465,7 +465,13 @@ export async function POST(req: NextRequest) {
               text: outbound.text,
             });
 
-        if (!result.success) throw new Error(result.error || "Failed to send follow-up");
+        if (!result.success) {
+          if (result.quotaExhausted) {
+            console.log(`[cron] Daily inbox quota reached for org ${orgId}. Halting follow-up queue for today.`);
+            break;
+          }
+          throw new Error(result.error || "Failed to send follow-up");
+        }
 
         await db.job.update({ where: { id: job.id }, data: { status: "done" } });
 
