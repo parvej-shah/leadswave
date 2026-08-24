@@ -4,6 +4,7 @@ import { getSystemSettings } from "@/lib/settings";
 import { outreachGraph } from "@/agents/outreach/graph";
 import { sendTelegramMessage, escapeHtml } from "@/lib/telegram";
 import { logError } from "@/lib/activity";
+import { POST as processFollowupJobs } from "../process-jobs/route";
 
 const MAX_PER_RUN = 1; // one lead per invocation — the GH Actions workflow loops with spacing
 
@@ -19,12 +20,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Also process pending follow-up sequence jobs
+  let followupResult: any = null;
+  try {
+    const followupRes = await processFollowupJobs(req);
+    if (followupRes.ok) {
+      followupResult = await followupRes.json();
+    }
+  } catch (err) {
+    console.error("[auto-send] Error invoking process-jobs:", err);
+  }
+
   const campaigns = await db.campaign.findMany({
     where: { autoSend: true, status: "active", deletedAt: null },
   });
 
   if (campaigns.length === 0) {
-    return NextResponse.json({ ok: true, processed: 0, campaigns: 0 });
+    return NextResponse.json({
+      ok: true,
+      processed: followupResult?.processed ?? 0,
+      failed: followupResult?.failed ?? 0,
+      campaigns: 0,
+      followups: followupResult,
+    });
   }
 
   // Multi-tenant: every limit, credential, and suppression list is per-org.
