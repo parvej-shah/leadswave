@@ -70,6 +70,7 @@ export async function generateText(prompt: string, model = "gemini-flash-latest"
       return result.response.text().trim();
     } catch (err) {
       lastErr = err;
+      console.error("[gemini] Error generating content:", err);
       if (isQuotaError(err)) {
         cooldownUntil.set(picked.key, nextUtcMidnight());
         console.warn(`[gemini] key ${maskKey(picked.key)} quota hit — cooling down until next UTC day`);

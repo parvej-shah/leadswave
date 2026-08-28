@@ -75,7 +75,8 @@ score = estimated density rank normalized to 1–100 (100 = city with the most b
     }
 
     return NextResponse.json({ cities });
-  } catch {
+  } catch (error) {
+    console.error("[suggest-cities] Failed:", error);
     return NextResponse.json({ error: "Failed to suggest cities" }, { status: 502 });
   }
 }
