@@ -905,7 +905,7 @@ export function NewCampaignWizard() {
               ← Back
             </Button>
             {method === "import" ? (
-              <Button type="button" size="lg" onClick={startImport} disabled={creatingCampaign} iconStart="upload">
+              <Button type="button" size="lg" onClick={startImport} loading={creatingCampaign} iconStart="upload">
                 {creatingCampaign ? "Creating…" : "Continue to Import"}
               </Button>
             ) : (
@@ -913,8 +913,8 @@ export function NewCampaignWizard() {
                 type="button"
                 size="lg"
                 onClick={findCities}
-                disabled={!method || loadingCities}
-                iconStart={loadingCities ? "refresh" : "sparkle"}
+                disabled={!method} loading={loadingCities}
+                iconStart="sparkle"
               >
                 {loadingCities ? "finding cities…" : "Find Cities"}
               </Button>
@@ -1007,8 +1007,8 @@ export function NewCampaignWizard() {
               type="button"
               size="lg"
               onClick={findAreas}
-              iconStart={loadingAreas ? "refresh" : "sparkle"}
-              disabled={selectedCities.size === 0 || loadingAreas}
+              iconStart="sparkle"
+              disabled={selectedCities.size === 0} loading={loadingAreas}
             >
               {loadingAreas
                 ? "finding areas…"
@@ -1163,7 +1163,7 @@ export function NewCampaignWizard() {
                 variant="ghost"
                 size="sm"
                 iconStart="refresh"
-                disabled={rerunning}
+                loading={rerunning}
                 onClick={rerun}
               >
                 {rerunning ? "Scanning…" : "Re-run"}
@@ -1178,7 +1178,7 @@ export function NewCampaignWizard() {
                 All results may already be saved or deduped.
               </p>
               <div className="mt-4">
-                <Button type="button" variant="ghost" size="sm" iconStart="refresh" onClick={rerun} disabled={rerunning}>
+                <Button type="button" variant="ghost" size="sm" iconStart="refresh" onClick={rerun} loading={rerunning}>
                   {rerunning ? "Scanning…" : "Try again"}
                 </Button>
               </div>

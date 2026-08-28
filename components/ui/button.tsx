@@ -39,11 +39,12 @@ export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
     iconStart?: IconName;
     iconEnd?: IconName;
     kbd?: string;
+    loading?: boolean;
   };
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   function Button(
-    { className, variant, size, fullWidth, iconStart, iconEnd, kbd, children, type = "button", ...props },
+    { className, variant, size, fullWidth, iconStart, iconEnd, kbd, loading, children, type = "button", disabled, ...props },
     ref
   ) {
     const iconSize = size === "sm" ? 12 : 14;
@@ -51,12 +52,17 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         type={type}
+        disabled={disabled || loading}
         className={cn(buttonVariants({ variant, size, fullWidth }), className)}
         {...props}
       >
-        {iconStart && <Icon name={iconStart} size={iconSize} />}
+        {loading ? (
+          <Icon name="refresh" size={iconSize} className="animate-spin" />
+        ) : iconStart ? (
+          <Icon name={iconStart} size={iconSize} />
+        ) : null}
         {children}
-        {iconEnd && <Icon name={iconEnd} size={iconSize} />}
+        {!loading && iconEnd && <Icon name={iconEnd} size={iconSize} />}
         {kbd && (
           <span
             className={cn(

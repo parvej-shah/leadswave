@@ -563,7 +563,7 @@ export function ImportWizard({
             <Button type="button" variant="ghost" onClick={() => setStep("mapping")}>
               ← Edit mapping
             </Button>
-            <Button type="button" size="lg" onClick={doImport} disabled={importing || newCount === 0} iconStart="check">
+            <Button type="button" size="lg" onClick={doImport} disabled={newCount === 0} loading={importing} iconStart="check">
               {importing
                 ? "Importing…"
                 : newCount === usableCount
