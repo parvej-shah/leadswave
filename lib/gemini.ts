@@ -44,14 +44,14 @@ function maskKey(k: string): string {
   return `${k.slice(0, 4)}…${k.slice(-4)}`;
 }
 
-export function getGeminiModel(model = "gemini-2.5-flash") {
+export function getGeminiModel(model = "gemini-3.6-flash") {
   const picked = pickKey();
   if (!picked) throw new Error("No Gemini API key available (all quotas exhausted or none configured)");
   const genAI = new GoogleGenerativeAI(picked.key);
   return genAI.getGenerativeModel({ model });
 }
 
-export async function generateText(prompt: string, model = "gemini-2.5-flash"): Promise<string> {
+export async function generateText(prompt: string, model = "gemini-3.6-flash"): Promise<string> {
   if (keys.length === 0) throw new Error("GEMINI_API_KEY/GEMINI_API_KEYS not set");
 
   let lastErr: unknown = null;
