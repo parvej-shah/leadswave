@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { isEmailAllowed } from "@/lib/allowlist";
 
 export async function POST() {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user || !isEmailAllowed(session.user.email))
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const headers: Record<string, string> = { "Content-Type": "application/json" };

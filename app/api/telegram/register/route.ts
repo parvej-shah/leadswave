@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { isEmailAllowed } from "@/lib/allowlist";
 
 export async function GET() {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user || !isEmailAllowed(session.user.email))
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;

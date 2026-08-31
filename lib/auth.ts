@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { db } from "@/lib/db";
 import { encryptSecret } from "@/lib/crypto";
+import { isEmailAllowed } from "@/lib/allowlist";
 
 /**
  * Ensure a User + Organization + owner Membership exist for this identity.
@@ -116,6 +117,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
+    // Private platform: only allowlisted identities may sign in at all. Returning
+    // false here aborts before any user/org is provisioned, so an outsider who
+    // completes Google OAuth still gets no account and no session.
+    async signIn({ profile, user }) {
+      const email = profile?.email ?? user?.email;
+      if (!isEmailAllowed(email)) {
+        console.warn(`[auth] Denied sign-in for non-allowlisted email: ${email ?? "<none>"}`);
+        return false;
+      }
+      return true;
+    },
     async redirect({ url, baseUrl }) {
       const canonicalBase =
         baseUrl && !baseUrl.includes("leadswave-eight.vercel.app")
@@ -137,6 +149,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return canonicalBase;
     },
     async jwt({ token, account, profile }) {
+      // Revocation path: a token minted before this address was removed from the
+      // allowlist must stop working, not merely be blocked at next login.
+      const tokenEmail = (profile?.email ?? token.email) as string | undefined;
+      if (tokenEmail && !isEmailAllowed(tokenEmail)) {
+        return null;
+      }
+
       if (account) {
         token.accessToken = account.access_token;
         token.refreshToken = account.refresh_token;
@@ -185,6 +204,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return token;
     },
     async session({ session, token }) {
+      // Defence in depth: strip org/role so requireOrg() rejects with 401 rather
+      // than throwing a 500 out of the session callback.
+      if (!isEmailAllowed(session.user?.email ?? token.email)) {
+        session.orgId = "";
+        session.role = "";
+        return session;
+      }
       session.user.id = token.userId ?? token.sub!;
       session.orgId = token.orgId ?? "";
       session.role = token.role ?? "";

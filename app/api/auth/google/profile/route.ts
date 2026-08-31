@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { isEmailAllowed } from "@/lib/allowlist";
 import { getOrgOwnerGoogleToken } from "@/lib/tenant";
 import { getSystemSettings } from "@/lib/settings";
 
 export async function GET() {
   const session = await auth();
-  if (!session?.user?.id || !session.orgId) {
+  if (!session?.user?.id || !session.orgId || !isEmailAllowed(session.user.email)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

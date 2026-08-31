@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireOrg, requireRole, tenantErrorResponse } from "@/lib/tenant";
+import { isEmailAllowed } from "@/lib/allowlist";
 
 const INVITE_TTL_DAYS = 7;
 const VALID_ROLES = new Set(["admin", "member"]); // owners are promoted, not invited
@@ -40,6 +41,16 @@ export async function POST(req: NextRequest) {
   if (!normalized || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(normalized)) {
     return NextResponse.json({ error: "Valid email required" }, { status: 400 });
   }
+  // Private platform: invites cannot be used to widen access beyond the
+  // allowlist. Rejected at creation so it fails visibly here rather than
+  // silently at the invitee's blocked sign-in.
+  if (!isEmailAllowed(normalized)) {
+    return NextResponse.json(
+      { error: "This platform is private; that address is not permitted." },
+      { status: 403 },
+    );
+  }
+
   const inviteRole = role && VALID_ROLES.has(role) ? role : "member";
 
   // Already a member?

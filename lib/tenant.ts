@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { decryptSecret } from "@/lib/crypto";
+import { isEmailAllowed } from "@/lib/allowlist";
 
 export type OrgContext = {
   userId: string;
@@ -27,6 +28,11 @@ export async function requireOrg(): Promise<OrgContext> {
   const session = await auth();
   if (!session?.user?.id || !session.orgId) {
     throw new TenantError(401, "Unauthorized");
+  }
+  // Private platform: the final server-side gate. Even a validly-signed session
+  // is refused if its identity is not on the allowlist.
+  if (!isEmailAllowed(session.user.email)) {
+    throw new TenantError(403, "Forbidden");
   }
   return { userId: session.user.id, orgId: session.orgId, role: session.role || "member" };
 }

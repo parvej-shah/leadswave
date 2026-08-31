@@ -10,11 +10,24 @@ function SignInButton() {
   const raw = searchParams.get("callbackUrl") ?? "/";
   // Only same-origin relative paths — never an absolute URL from the query string.
   const callbackUrl = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
+  // NextAuth sends ?error=AccessDenied when the signIn callback rejects the
+  // identity — without this the blocked user just bounces back to a blank form.
+  const denied = searchParams.get("error") === "AccessDenied";
   return (
-    <Button fullWidth size="lg" onClick={() => signIn("google", { callbackUrl })}>
-      <GoogleIcon size={16} />
-      <span>Continue with Google →</span>
-    </Button>
+    <>
+      {denied && (
+        <p
+          role="alert"
+          className="font-mono text-[12px] text-center leading-[1.55] m-0 rounded-lg px-3 py-2.5 bg-[oklch(0.55_0.19_25/12%)] border border-[oklch(0.55_0.19_25/30%)] text-[oklch(0.78_0.13_25)]"
+        >
+          This platform is private. That Google account is not authorized.
+        </p>
+      )}
+      <Button fullWidth size="lg" onClick={() => signIn("google", { callbackUrl })}>
+        <GoogleIcon size={16} />
+        <span>Continue with Google →</span>
+      </Button>
+    </>
   );
 }
 

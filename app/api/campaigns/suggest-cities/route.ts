@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { isEmailAllowed } from "@/lib/allowlist";
 import { generateText } from "@/lib/gemini";
 
 async function getUserId() {
   const session = await auth();
+  if (!isEmailAllowed(session?.user?.email)) return null;
   return session?.user?.id ?? null;
 }
 
