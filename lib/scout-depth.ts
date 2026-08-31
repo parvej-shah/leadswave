@@ -6,9 +6,9 @@
 export type ScoutDepth = "light" | "normal" | "deep";
 
 const DEPTH_BUDGETS: Record<ScoutDepth, { maxPerArea: number; maxPerCity: number }> = {
-  light: { maxPerArea: 50, maxPerCity: 150 },
-  normal: { maxPerArea: 100, maxPerCity: 300 }, // current defaults
-  deep: { maxPerArea: 100, maxPerCity: 500 }, // 100 = Places pagination ceiling per query
+  light: { maxPerArea: 25, maxPerCity: 60 },
+  normal: { maxPerArea: 40, maxPerCity: 100 },
+  deep: { maxPerArea: 60, maxPerCity: 160 },
 };
 
 export function scoutBudgets(depth: string | null | undefined) {

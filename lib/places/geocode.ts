@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { reservePlacesCall, QuotaExceededError } from "./quota";
 
 /**
  * Geocode any place query to lat/lng using the Places API text search
@@ -8,6 +9,9 @@ export async function geocodePlace(
   apiKey: string,
   textQuery: string,
 ): Promise<{ lat: number; lng: number } | null> {
+  // Outside the try: a tripped circuit breaker must propagate, not be swallowed
+  // into a `null` that callers mistake for "this place wasn't found" and loop past.
+  await reservePlacesCall();
   try {
     const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
       method: "POST",
@@ -25,7 +29,8 @@ export async function geocodePlace(
     const loc = data.places?.[0]?.location;
     if (!loc?.latitude || !loc?.longitude) return null;
     return { lat: loc.latitude, lng: loc.longitude };
-  } catch {
+  } catch (e) {
+    if (e instanceof QuotaExceededError) throw e;
     return null;
   }
 }

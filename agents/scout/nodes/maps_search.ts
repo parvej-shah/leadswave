@@ -1,5 +1,6 @@
 import { searchAllPlaces, searchAllPlacesNearby, PlaceLite } from "@/lib/places/client";
-import { geocodePlace, haversineKm } from "@/lib/places/geocode";
+import { geocodeCached, haversineKm } from "@/lib/places/geocode";
+import { QuotaExceededError } from "@/lib/places/quota";
 import { MapsScoutState, MapsLead } from "../maps-graph";
 import { matchOfferKey } from "@/agents/outreach/lib/offer";
 
@@ -13,7 +14,8 @@ const QUADRANT_OFFSETS = [
 ];
 
 function geocodeCity(apiKey: string, city: string, country: string) {
-  return geocodePlace(apiKey, `${city}, ${country}`);
+  // Cached: city centres are deterministic and repeat every run — never pay twice.
+  return geocodeCached(apiKey, `${city}, ${country}`);
 }
 
 // A geocoded "area" further than this from the city centre is treated as a hallucinated
@@ -21,7 +23,9 @@ function geocodeCity(apiKey: string, city: string, country: string) {
 const MAX_AREA_DISTANCE_KM = 40;
 const AREA_RADIUS_METERS = 4000;
 // Cap query variants per area to bound API-call fan-out (leads are uncapped, calls are not).
-const MAX_VARIANTS_PER_AREA = 3;
+const MAX_VARIANTS_PER_AREA = 2;
+// Hard ceiling on places collected in a single run, enforced on every search path.
+const MAX_GLOBAL_PLACES_PER_RUN = 250;
 
 // Synonym map: keys are lowercased substrings to match against businessType.
 // Values are the search query variants to run per city — more variants = more leads found.
@@ -125,7 +129,8 @@ async function searchCityByAreas(opts: {
   let anyAreaCovered = false;
 
   for (const area of areas) {
-    const areaCentre = await geocodePlace(state.googleMapsApiKey, `${area}, ${city}, ${state.country}`);
+    if (byPlaceId.size >= MAX_GLOBAL_PLACES_PER_RUN) break;
+    const areaCentre = await geocodeCached(state.googleMapsApiKey, `${area}, ${city}, ${state.country}`);
     if (!areaCentre) {
       console.warn(`[maps-scout] area "${area}" (${city}) failed geocoding, skipping`);
       continue;
@@ -139,6 +144,7 @@ async function searchCityByAreas(opts: {
     let areaCount = 0;
     for (const variant of areaVariants) {
       if (areaCount >= state.maxPerArea) break;
+      if (byPlaceId.size >= MAX_GLOBAL_PLACES_PER_RUN) break;
       try {
         const found = await searchAllPlacesNearby({
           apiKey: state.googleMapsApiKey,
@@ -155,6 +161,9 @@ async function searchCityByAreas(opts: {
           }
         }
       } catch (err) {
+        // The breaker blocks every later call too — abort rather than logging
+        // the same failure once per remaining query.
+        if (err instanceof QuotaExceededError) throw err;
         console.warn(`[maps-scout] area search failed for "${variant}" in ${area}, ${city}:`, err instanceof Error ? err.message : err);
       }
     }
@@ -169,7 +178,15 @@ export async function mapsSearchNode(state: MapsScoutState): Promise<Partial<Map
   // Quadrant-fallback budget: variants × 4 quadrants each, capped at maxPerCity total per city
   const perQuery = Math.ceil(state.maxPerCity / (variants.length * QUADRANT_OFFSETS.length));
 
-  for (const city of state.selectedCities) {
+  // Safety cap on cities per single run
+  const citiesToProcess = state.selectedCities.slice(0, 15);
+
+  for (const city of citiesToProcess) {
+    if (byPlaceId.size >= MAX_GLOBAL_PLACES_PER_RUN) {
+      console.log(`[maps-scout] reached global safety cap of ${MAX_GLOBAL_PLACES_PER_RUN} places, stopping further queries.`);
+      break;
+    }
+
     // Geocode city centre — anchor for area sanity checks and quadrant offsets
     const centre = await geocodeCity(state.googleMapsApiKey, city, state.country);
 
@@ -180,10 +197,14 @@ export async function mapsSearchNode(state: MapsScoutState): Promise<Partial<Map
       console.warn(`[maps-scout] no areas geocoded for ${city}, falling back to quadrant search`);
     }
 
-    for (const variant of variants) {
+    const activeVariants = variants.slice(0, 2);
+    for (const variant of activeVariants) {
+      if (byPlaceId.size >= MAX_GLOBAL_PLACES_PER_RUN) break;
+
       if (centre) {
         // Grid search: 4 quadrants around city centre for dense coverage
         for (const offset of QUADRANT_OFFSETS) {
+          if (byPlaceId.size >= MAX_GLOBAL_PLACES_PER_RUN) break;
           try {
             const found = await searchAllPlacesNearby({
               apiKey: state.googleMapsApiKey,
@@ -197,6 +218,7 @@ export async function mapsSearchNode(state: MapsScoutState): Promise<Partial<Map
               if (!byPlaceId.has(p.placeId)) byPlaceId.set(p.placeId, p);
             }
           } catch (err) {
+            if (err instanceof QuotaExceededError) throw err;
             console.warn(`[maps-scout] quadrant search failed for "${variant}" near ${city}:`, err instanceof Error ? err.message : err);
           }
         }
@@ -207,12 +229,13 @@ export async function mapsSearchNode(state: MapsScoutState): Promise<Partial<Map
           const found = await searchAllPlaces({
             apiKey: state.googleMapsApiKey,
             textQuery,
-            maxResults: Math.ceil(state.maxPerCity / variants.length),
+            maxResults: Math.ceil(state.maxPerCity / activeVariants.length),
           });
           for (const p of found) {
             if (!byPlaceId.has(p.placeId)) byPlaceId.set(p.placeId, p);
           }
         } catch (err) {
+          if (err instanceof QuotaExceededError) throw err;
           console.warn(`[maps-scout] text search failed for "${textQuery}":`, err instanceof Error ? err.message : err);
         }
       }

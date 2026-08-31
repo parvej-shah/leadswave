@@ -1,3 +1,5 @@
+import { reservePlacesCall } from "./quota";
+
 const SEARCH_TEXT_URL = "https://places.googleapis.com/v1/places:searchText";
 
 const FIELD_MASK = [
@@ -11,6 +13,11 @@ const FIELD_MASK = [
   "places.location",
   "nextPageToken",
 ].join(",");
+
+// The daily circuit breaker lives in ./quota — a DB-backed counter shared across
+// every serverless instance, fronted by a free in-process burst brake.
+// Re-exported so existing callers keep a single import site.
+export { reservePlacesCall, getPlacesUsageToday, QuotaExceededError, MAX_DAILY_REQUESTS } from "./quota";
 
 export type PlaceLite = {
   placeId: string;
@@ -56,6 +63,7 @@ export async function searchPlaces(opts: {
   maxResults?: number;
   pageToken?: string;
 }): Promise<{ places: PlaceLite[]; nextPageToken?: string }> {
+  await reservePlacesCall();
   const pageSize = Math.min(opts.maxResults ?? 20, 20);
 
   const res = await fetch(SEARCH_TEXT_URL, {
@@ -94,11 +102,12 @@ export async function searchAllPlaces(opts: {
   textQuery: string;
   maxResults?: number;
 }): Promise<PlaceLite[]> {
-  const cap = Math.min(opts.maxResults ?? 60, 100);
+  const cap = Math.min(opts.maxResults ?? 40, 60);
   const seen = new Map<string, PlaceLite>();
   let pageToken: string | undefined;
 
-  for (let page = 0; page < 5; page++) {
+  // Capped at 2 pages (up to 40 results) to prevent uncontrolled API cost
+  for (let page = 0; page < 2; page++) {
     const { places, nextPageToken } = await searchPlaces({
       apiKey: opts.apiKey,
       textQuery: opts.textQuery,
@@ -128,11 +137,13 @@ export async function searchAllPlacesNearby(opts: {
   radiusMeters: number;
   maxResults?: number;
 }): Promise<PlaceLite[]> {
-  const cap = Math.min(opts.maxResults ?? 20, 100);
+  const cap = Math.min(opts.maxResults ?? 20, 40);
   const seen = new Map<string, PlaceLite>();
   let pageToken: string | undefined;
 
-  for (let page = 0; page < 5; page++) {
+  // Capped at 2 pages (up to 40 results) to prevent uncontrolled API cost
+  for (let page = 0; page < 2; page++) {
+    await reservePlacesCall();
     const pageSize = Math.min(20, cap - seen.size);
     const res = await fetch(SEARCH_TEXT_URL, {
       method: "POST",

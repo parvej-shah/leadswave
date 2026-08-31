@@ -172,6 +172,19 @@ model GeoCache {
   createdAt DateTime @default(now())
 }
 
+/// Cross-process daily spend budget for paid external APIs (Google Places).
+/// The in-memory breaker in lib/places/client.ts stops a runaway loop inside one
+/// process for free; this row is the real daily ceiling, shared across every
+/// serverless instance, cold start and cron invocation.
+/// id is "<api>:<YYYY-MM-DD>" (UTC), so each day is a fresh row and old rows are
+/// a natural audit trail of daily usage.
+model ApiQuota {
+  id        String   @id
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
 model Message {
   id             String   @id @default(cuid())
   leadId         String

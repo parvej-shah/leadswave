@@ -13,6 +13,7 @@ config({ path: ".env.local" }); // SETTINGS_ENCRYPTION_KEY lives here
 config();
 import { db } from "../lib/db";
 import { getSystemSettings } from "../lib/settings";
+import { reservePlacesCall, QuotaExceededError } from "../lib/places/quota";
 
 const BATCH = 5;
 const BATCH_DELAY_MS = 600;
@@ -22,6 +23,7 @@ async function fetchLocation(
   placeId: string,
 ): Promise<{ lat: number; lng: number } | null> {
   for (let attempt = 0; attempt < 4; attempt++) {
+    await reservePlacesCall();
     const res = await fetch(
       `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`,
       { headers: { "X-Goog-Api-Key": apiKey, "X-Goog-FieldMask": "location" } },
@@ -97,6 +99,12 @@ async function main() {
 
 main()
   .catch((e) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("Circuit-Breaker") || e instanceof QuotaExceededError) {
+      console.error(`\nStopped: ${msg}`);
+      console.error("Re-run tomorrow to continue — the backfill is idempotent and resumes where it left off.");
+      process.exit(1);
+    }
     console.error(e);
     process.exit(1);
   })
